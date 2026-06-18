@@ -51,17 +51,12 @@ Create the cluster:
 make create
 ```
 
-Check the root application:
+Run basic health checks:
 
 ```bash
 make status
 ```
 
-Run basic health checks:
-
-```bash
-make verify
-```
 
 Delete the k3d cluster:
 

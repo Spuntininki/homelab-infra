@@ -28,9 +28,6 @@ bootstrap:
 	kubectl apply -k bootstrap/argocd
 
 status:
-	kubectl get applications -n default
-
-verify:
 	kubectl get nodes
 	kubectl get pods -n default
 	kubectl get applications -n default
