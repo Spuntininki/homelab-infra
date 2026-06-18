@@ -23,3 +23,54 @@ manifests/
 3. `Argo CD` starts reconciling the rest of the repository.
 4. Platform components live under `apps/platform`.
 5. Ad hoc resources live under `manifests`.
+
+## Local workflow
+
+### Requirements
+
+- `k3d` => `v5.9.0`
+- `kubectl`=> `v1.35.4`
+
+Install `k3d`:
+
+```bash
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+```
+
+Install `kubectl`:
+
+```bash
+sudo dnf install kubectl
+```
+
+### Workflow
+
+Create the cluster:
+
+```bash
+make create
+```
+
+Check the root application:
+
+```bash
+make status
+```
+
+Run basic health checks:
+
+```bash
+make verify
+```
+
+Delete the k3d cluster:
+
+```bash
+make delete
+```
+
+Recreate the cluster from scratch:
+
+```bash
+make recreate
+```
