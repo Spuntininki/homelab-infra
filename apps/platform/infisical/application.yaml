@@ -1,0 +1,96 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infisical
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
+    chart: infisical
+    targetRevision: 0.6.8
+    helm:
+      values: |
+        infisical:
+          # Enable standalone mode (no external dependencies for quick start)
+          standalone: true
+          
+        # Frontend configuration
+        frontend:
+          enabled: true
+          replicaCount: 1
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          service:
+            type: ClusterIP
+            port: 80
+
+        # Backend configuration
+        backend:
+          enabled: true
+          replicaCount: 1
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          service:
+            type: ClusterIP
+            port: 4000
+
+        # PostgreSQL (embedded for simplicity)
+        postgresql:
+          enabled: true
+          auth:
+            username: infisical
+$1<REDACTED>
+            database: infisical
+          primary:
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "250m"
+            persistence:
+              enabled: true
+              size: 8Gi
+
+        # Redis (embedded)
+        redis:
+          enabled: true
+          auth:
+            enabled: false
+          master:
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "50m"
+              limits:
+                memory: "256Mi"
+                cpu: "100m"
+            persistence:
+              enabled: true
+              size: 2Gi
+
+        # Ingress disabled (will use port-forward initially)
+        ingress:
+          enabled: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: infisical
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
