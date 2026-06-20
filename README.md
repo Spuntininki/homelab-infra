@@ -1,28 +1,29 @@
 # homelab-infra
 
-GitOps base for `k3d` + `Argo CD`.
+GitOps-based homelab infrastructure using `k3d` + `Argo CD`.
 
-## Structure
+## Repository Structure
 
 ```text
 bootstrap/
-  argocd/
+  argocd/              # Initial Argo CD manifests; manual bootstrap only
 clusters/
-  local/
+  local/               # k3d cluster config; root Application lives here
 apps/
-  platform/
-charts/
+  platform/            # Platform apps: sealed-secrets, monitoring, logs
+charts/                # Custom Helm charts (if needed)
 manifests/
-  common/
+  common/              # Reusable plain Kubernetes YAMLs
 ```
 
-## Flow
+## How It Works
 
-1. Bring up the cluster with `k3d`.
-2. Apply the `Argo CD` bootstrap.
-3. `Argo CD` starts reconciling the rest of the repository.
-4. Platform components live under `apps/platform`.
-5. Ad hoc resources live under `manifests`.
+1. `make create` brings up the `k3d` cluster
+2. `make repo-secret` registers your SSH key for private repo access
+3. `make bootstrap` installs `Argo CD` and creates the root `Application`
+4. `Argo CD` reads `clusters/local/` and syncs the `platform` app-of-apps
+5. The `platform` app creates all apps under `apps/platform/`
+6. Everything stays in sync with Git automatically
 
 ## Local workflow
 
