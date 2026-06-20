@@ -2,16 +2,16 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: root
-  namespace: default
+  namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/Spuntininki/homelab-infra.git
+    repoURL: git@github.com:Spuntininki/homelab-infra.git
     targetRevision: HEAD
     path: clusters/local
   destination:
     server: https://kubernetes.default.svc
-    namespace: default
+    namespace: argocd
   syncPolicy:
     automated:
       prune: true

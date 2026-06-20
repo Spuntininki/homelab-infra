@@ -30,6 +30,8 @@ manifests/
 
 - `k3d` => `v5.9.0`
 - `kubectl`=> `v1.35.4`
+- a dedicated local SSH private key for Argo CD repo access, for example `~/.ssh/id_ed25519_argocd`
+- the key must not have a passphrase
 
 Install `k3d`:
 
@@ -51,12 +53,23 @@ Create the cluster:
 make create
 ```
 
+Register the Git repository credential from your local SSH key:
+
+```bash
+make repo-secret
+```
+
+If needed, generate a dedicated key:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_argocd -N ""
+```
+
 Run basic health checks:
 
 ```bash
 make status
 ```
-
 
 Delete the k3d cluster:
 
