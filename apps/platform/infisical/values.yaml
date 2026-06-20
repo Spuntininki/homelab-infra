@@ -1,0 +1,106 @@
+# Infisical backend configuration
+infisical:
+  enabled: true
+  name: infisical
+  replicaCount: 1  # Homelab: single replica
+  
+  image:
+    repository: infisical/infisical
+    tag: "v0.161.3"
+    pullPolicy: IfNotPresent
+  
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Disable auto-bootstrap (manual setup via UI)
+  autoBootstrap:
+    enabled: false
+
+# PostgreSQL configuration
+postgresql:
+  enabled: true
+  fullnameOverride: "infisical-postgresql"
+  
+  image:
+    registry: docker.io
+    repository: bitnami/postgresql
+    tag: "latest"  # PostgreSQL 18.x (latest stable)
+  
+  auth:
+    username: infisical
+    database: infisicalDB
+    existingSecret: "infisical-postgresql"  # Uses SealedSecret
+    secretKeys:
+      adminPasswordKey: "postgres-password"
+      userPasswordKey: "password"
+  
+  primary:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    
+    persistence:
+      enabled: true
+      size: 5Gi
+
+# Redis configuration
+redis:
+  enabled: true
+  fullnameOverride: "infisical-redis"
+  architecture: standalone
+  
+  image:
+    registry: docker.io
+    repository: bitnami/redis
+    tag: "latest"  # Redis 7.4.x (latest stable)
+  
+  auth:
+    enabled: true
+    existingSecret: "infisical-redis"  # Uses SealedSecret
+    existingSecretPasswordKey: "redis-password"
+  
+  master:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+    
+    persistence:
+      enabled: false  # Redis: cache is volatile
+    
+    # Critical: Redis memory configuration
+    configuration: |-
+      maxmemory 200mb
+      maxmemory-policy allkeys-lru
+      appendonly no
+
+# Ingress configuration for Traefik
+ingress:
+  enabled: true
+  hostName: "infisical.local"
+  ingressClassName: "traefik"  # Use existing k3d Traefik
+  
+  nginx:
+    enabled: false  # Disable bundled NGINX
+  
+  annotations:
+    # Traefik: use HTTP entrypoint (port 80)
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+  
+  tls: []  # HTTPS to be configured later
+
+# Disable bundled ingress-nginx chart
+ingress-nginx:
+  enabled: false

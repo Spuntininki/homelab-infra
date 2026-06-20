@@ -3,100 +3,28 @@ kind: Application
 metadata:
   name: infisical
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
+  
   source:
-    repoURL: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts/
-    chart: infisical
-    targetRevision: 0.4.2
+    repoURL: git@github.com:Spuntininki/homelab-infra.git
+    targetRevision: HEAD
+    path: charts/infisical  # Local chart
+    
     helm:
-      values: |
-        # Backend configuration
-        backend:
-          replicaCount: 1
-          image:
-            repository: infisical/infisical
-            tag: "v0.161.3-postgres"
-            pullPolicy: IfNotPresent
-          
-          resources:
-            requests:
-              memory: "256Mi"
-              cpu: "100m"
-            limits:
-              memory: "512Mi"
-              cpu: "250m"
-          
-          service:
-            type: ClusterIP
-            port: 8080
-
-        # MongoDB - DISABLED (using PostgreSQL)
-        mongodb:
-          enabled: false
-
-        # PostgreSQL configuration
-        postgresql:
-          enabled: true
-          image:
-            registry: docker.io
-            repository: bitnami/postgresql
-            tag: "16"
-          auth:
-            username: infisical
-            password: <REDACTED>
-            database: infisical
-$1<REDACTED>
-          primary:
-            resources:
-              requests:
-                memory: "256Mi"
-                cpu: "100m"
-              limits:
-                memory: "512Mi"
-                cpu: "250m"
-            persistence:
-              enabled: true
-              size: 8Gi
-
-        # Redis configuration
-        redis:
-          enabled: true
-          image:
-            registry: docker.io
-            repository: bitnami/redis
-            tag: "7.4-debian-12"
-          auth:
-            enabled: false
-          master:
-            resources:
-              requests:
-                memory: "128Mi"
-                cpu: "50m"
-              limits:
-                memory: "256Mi"
-                cpu: "100m"
-            persistence:
-              enabled: true
-              size: 2Gi
-          
-          # Redis memory settings (78% of k8s limit)
-          commonConfiguration: |-
-            maxmemory 200mb
-            maxmemory-policy allkeys-lru
-            appendonly yes
-            appendfsync everysec
-
-        # Ingress disabled
-        ingress:
-          enabled: false
-
+      valueFiles:
+        - ../../apps/platform/infisical/values.yaml  # Custom values
+  
   destination:
     server: https://kubernetes.default.svc
     namespace: infisical
+  
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true

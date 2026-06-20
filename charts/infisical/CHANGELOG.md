@@ -1,0 +1,77 @@
+## 1.9.0 (May 28, 2026)
+Changes:
+* Added support for sidecar containers via `infisical.extraContainers`, enabling use cases like HSM PKCS#11 client sidecars (e.g., Entrust nShield).
+* Added support for init containers via `infisical.extraInitContainers`.
+* Documented `infisical.extraVolumes` and `infisical.extraVolumeMounts` in `values.yaml` with usage examples.
+
+## 1.8.0 (April 6, 2026)
+Changes:
+* The bundled ingress-nginx controller now uses a dedicated IngressClass name (`infisical-nginx`) instead of the common `nginx` class. This prevents the bundled controller from unintentionally picking up other Ingress resources in your cluster, and avoids conflicts with existing ingress controllers.
+* If you use the bundled ingress-nginx (`ingress.nginx.enabled: true`), no action is needed — both the controller and Infisical's Ingress resource update together on upgrade.
+* If you bring your own ingress controller (`ingress.nginx.enabled: false`), no action is needed — the Ingress resource will continue to default to the `nginx` class.
+* If you had previously set `ingress.ingressClassName` to a custom value in your values file, your override will continue to take effect.
+
+## 1.7.3 (March 7, 2026)
+Changes:
+* Added support for extra environment variables via `infisical.extraEnv`. This allows setting environment variables like `NODE_EXTRA_CA_CERTS` directly through Helm values without manually editing the deployment manifest.
+* Updated the default `infisical.image.tag` value to `v0.158.0`.
+
+## 1.7.2 (October 20, 2025)
+Changes:
+* Updated the default `infisical.image.tag` value to `v0.151.0`.
+* `autoDatabaseSchemaMigration` has been fully removed as all newer versions of Infisical automatically run migrations as apart of the startup process.
+
+## 1.7.1 (October 10, 2025)
+
+Changes:
+* Fixed using `extraVolumes` and `extraVolumeMounts` for when Infisical auto migration enabled
+    * Previously the custom volumes and custom volume mounts would only be added to the infisical core pods, but not the migration pod.
+
+## 1.7.0 (September 30, 2025)
+
+Changes:
+* Moved PostgreSQL and Redis helm dependencies to OCI Bitnami charts
+* Moved default Postgres and Redis repositories to `mirror.gcr.io/postgresql|redis`
+
+
+## 1.6.1 (July 3, 2025)
+
+Changes:
+* Added support for `topologySpreadConstraints` configuration in Helm chart for the Infisical deployment
+
+Features:
+* `topologySpreadConstraints`: Configure pod distribution across availability zones and nodes for high availability
+
+## 1.5.0 (March 26, 2025)
+
+Changes:
+* Added support for Kubernetes pod scheduling customization via `nodeSelector` and `tolerations`
+
+Features:
+* `nodeSelector`: Configure pod placement on nodes with specific labels
+* `tolerations`: Enable pods to schedule on tainted nodes
+
+## 1.4.1 (March 19, 2025)
+
+Changes:
+* Added support for supplying extra volume mounts and volumes via `infisical.extraVolumeMounts` and `infisical.extraVolumes`
+
+## 1.4.0 (November 06, 2024)
+
+Changes:
+* Chart is now fully documented 
+* New fields introduced: `infisical.databaseSchemaMigrationJob.image` and `infisical.serviceAccount`
+
+Features:
+
+* Added support for auto creating service account with required permissions via `infisical.serviceAccount.create`
+
+## 1.3.0 (October 28, 2024)
+
+Changes:
+* Fixed issue causing database migration to not run in non `default` namespace
+
+Features:
+
+* Added support for supplying Postgres secret as K8s secret via `postgresql.useExistingPostgresSecret`
+* Support overriding init container image via `infisical.databaseSchemaMigrationInitContainer`
