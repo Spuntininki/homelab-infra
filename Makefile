@@ -1,5 +1,5 @@
 CLUSTER_NAME ?= homelab
-K3D_ARGS ?= --servers 1 --agents 1 --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
+K3D_ARGS ?= --servers 1 --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
 REPO_URL ?= git@github.com:Spuntininki/homelab-infra.git
 REPO_SECRET_NAME ?= homelab-infra-repo
 REPO_SSH_KEY_FILE ?= $(HOME)/.ssh/id_ed25519_argocd
