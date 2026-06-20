@@ -12,10 +12,10 @@ infisical:
   resources:
     requests:
       cpu: 200m
-      memory: 256Mi
-    limits:
-      cpu: 500m
       memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
   
   # Disable auto-bootstrap (manual setup via UI)
   autoBootstrap:
@@ -33,11 +33,9 @@ postgresql:
   
   auth:
     username: infisical
+    password: <REDACTED>
     database: infisicalDB
-    existingSecret: "infisical-postgresql"  # Uses SealedSecret
-    secretKeys:
-      adminPasswordKey: "postgres-password"
-      userPasswordKey: "password"
+    postgresPassword: <REDACTED>
   
   primary:
     resources:
@@ -65,9 +63,8 @@ redis:
   
   auth:
     enabled: true
-    existingSecret: "infisical-redis"  # Uses SealedSecret
-    existingSecretPasswordKey: "redis-password"
-  
+    password: <REDACTED>  # Inline for homelab
+
   master:
     resources:
       requests:
