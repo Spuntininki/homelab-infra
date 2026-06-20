@@ -11,29 +11,14 @@ spec:
     targetRevision: 0.4.2
     helm:
       values: |
-        infisical:
-          # Enable standalone mode (no external dependencies for quick start)
-          standalone: true
-          
-        # Frontend configuration
-        frontend:
-          enabled: true
-          replicaCount: 1
-          resources:
-            requests:
-              memory: "128Mi"
-              cpu: "100m"
-            limits:
-              memory: "256Mi"
-              cpu: "200m"
-          service:
-            type: ClusterIP
-            port: 80
-
         # Backend configuration
         backend:
-          enabled: true
           replicaCount: 1
+          image:
+            repository: infisical/infisical
+            tag: "v0.161.3-postgres"
+            pullPolicy: IfNotPresent
+          
           resources:
             requests:
               memory: "256Mi"
@@ -41,17 +26,24 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "250m"
+          
           service:
             type: ClusterIP
-            port: 4000
+            port: 8080
+            annotations: {}
 
-        # PostgreSQL (embedded for simplicity)
+        # MongoDB - DISABLED (using PostgreSQL instead)
+        mongodb:
+          enabled: false
+
+        # PostgreSQL configuration
         postgresql:
           enabled: true
           auth:
             username: infisical
-$1<REDACTED>
+            password: <REDACTED>
             database: infisical
+$1<REDACTED>
           primary:
             resources:
               requests:
@@ -63,8 +55,12 @@ $1<REDACTED>
             persistence:
               enabled: true
               size: 8Gi
+          image:
+            registry: docker.io
+            repository: bitnami/postgresql
+            tag: "16"
 
-        # Redis (embedded)
+        # Redis configuration
         redis:
           enabled: true
           auth:
@@ -80,8 +76,19 @@ $1<REDACTED>
             persistence:
               enabled: true
               size: 2Gi
+          image:
+            registry: docker.io
+            repository: bitnami/redis
+            tag: "7.4"
+          
+          # Redis memory settings (78% of k8s limit)
+          commonConfiguration: |-
+            maxmemory 200mb
+            maxmemory-policy allkeys-lru
+            appendonly yes
+            appendfsync everysec
 
-        # Ingress disabled (will use port-forward initially)
+        # Ingress disabled
         ingress:
           enabled: false
 
