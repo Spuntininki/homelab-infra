@@ -30,15 +30,18 @@ spec:
           service:
             type: ClusterIP
             port: 8080
-            annotations: {}
 
-        # MongoDB - DISABLED (using PostgreSQL instead)
+        # MongoDB - DISABLED (using PostgreSQL)
         mongodb:
           enabled: false
 
         # PostgreSQL configuration
         postgresql:
           enabled: true
+          image:
+            registry: docker.io
+            repository: bitnami/postgresql
+            tag: "16.6.0"
           auth:
             username: infisical
             password: <REDACTED>
@@ -55,14 +58,14 @@ $1<REDACTED>
             persistence:
               enabled: true
               size: 8Gi
-          image:
-            registry: docker.io
-            repository: bitnami/postgresql
-            tag: "16"
 
         # Redis configuration
         redis:
           enabled: true
+          image:
+            registry: docker.io
+            repository: bitnami/redis
+            tag: "7.4.2"
           auth:
             enabled: false
           master:
@@ -76,10 +79,6 @@ $1<REDACTED>
             persistence:
               enabled: true
               size: 2Gi
-          image:
-            registry: docker.io
-            repository: bitnami/redis
-            tag: "7.4"
           
           # Redis memory settings (78% of k8s limit)
           commonConfiguration: |-
