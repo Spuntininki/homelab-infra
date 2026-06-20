@@ -84,6 +84,10 @@ infisical:
   # -- Kubernetes Secret reference containing Infisical root credentials
   kubeSecretRef: "infisical-secrets"
 
+  # -- When enabled, DB_CONNECTION_URI and REDIS_URL are read from the secret
+  # referenced by kubeSecretRef instead of being generated from chart values.
+  useExistingConnectionStringSecret:
+    enabled: false
   service:
     # -- Custom annotations for Infisical service
     annotations: {}
@@ -179,8 +183,8 @@ postgresql:
   auth:
     # -- Database username for PostgreSQL
     username: infisical
-    # -- Password for PostgreSQL database access
-$1<REDACTED>
+    # -- Password for PostgreSQL database access (required when not using existingSecret)
+    password: ""
     # -- Database name for Infisical
     database: infisicalDB
 
@@ -215,8 +219,8 @@ redis:
   usePassword: true
 
   auth:
-    # -- Redis password
-    password: "<REDACTED>"
+    # -- Redis password (required when not using existingSecret)
+    password: ""
 
   # -- Redis deployment type (e.g., standalone or cluster)
   architecture: standalone

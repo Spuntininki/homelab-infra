@@ -70,11 +70,11 @@ spec:
               name: {{ .Values.postgresql.useExistingPostgresSecret.existingConnectionStringSecret.name }}
               key: {{ .Values.postgresql.useExistingPostgresSecret.existingConnectionStringSecret.key }}
         {{- end }}
-        {{- if .Values.postgresql.enabled }}
+        {{- if and .Values.postgresql.enabled (not $infisicalValues.useExistingConnectionStringSecret.enabled) }}
         - name: DB_CONNECTION_URI
           value: {{ include "infisical.postgresDBConnectionString" . }}
         {{- end }}
-        {{- if .Values.redis.enabled }}
+        {{- if and .Values.redis.enabled (not $infisicalValues.useExistingConnectionStringSecret.enabled) }}
         - name: REDIS_URL
           value: {{ include "infisical.redisConnectionString" . }}
         {{- end }}

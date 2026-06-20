@@ -20,22 +20,23 @@ infisical:
   # Disable auto-bootstrap (manual setup via UI)
   autoBootstrap:
     enabled: false
+  
+  # Read DB_CONNECTION_URI and REDIS_URL from infisical-secrets
+  useExistingConnectionStringSecret:
+    enabled: true
 
 # PostgreSQL configuration
 postgresql:
   enabled: true
   fullnameOverride: "infisical-postgresql"
   
-  image:
-    registry: docker.io
-    repository: bitnami/postgresql
-    tag: "latest"  # PostgreSQL 18.x (latest stable)
-  
   auth:
     username: infisical
-    password: <REDACTED>
     database: infisicalDB
-    postgresPassword: <REDACTED>
+    existingSecret: "infisical-postgresql"
+    secretKeys:
+      adminPasswordKey: "postgres-password"
+      userPasswordKey: "password"
   
   primary:
     resources:
@@ -56,15 +57,11 @@ redis:
   fullnameOverride: "infisical-redis"
   architecture: standalone
   
-  image:
-    registry: docker.io
-    repository: bitnami/redis
-    tag: "latest"  # Redis 7.4.x (latest stable)
-  
   auth:
     enabled: true
-    password: <REDACTED>  # Inline for homelab
-
+    existingSecret: "infisical-redis"
+    existingSecretPasswordKey: "redis-password"
+  
   master:
     resources:
       requests:
