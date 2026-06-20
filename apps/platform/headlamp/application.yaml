@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: headlamp
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://headlamp-k8s.github.io/headlamp/
+    chart: headlamp
+    targetRevision: 0.30.0
+    helm:
+      values: |
+        config:
+          baseURL: ""
+        service:
+          type: ClusterIP
+          port: 80
+        ingress:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: headlamp
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
