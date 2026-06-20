@@ -54,6 +54,24 @@ Create the cluster:
 make create
 ```
 
+**Configuration options:**
+
+The Makefile supports customization via environment variables:
+
+```bash
+# Use k3s instead of k3d (default: k3d)
+K3_TYPE=k3s
+
+# Custom cluster name (default: homelab)
+CLUSTER_NAME=my-cluster
+
+# Custom k3d/k3s arguments
+K3_ARGS="--servers 3 --agents 2"
+
+# Combine multiple options
+K3_TYPE=k3d CLUSTER_NAME=dev K3_ARGS="--servers 1"
+```
+
 Register the Git repository credential from your local SSH key:
 
 ```bash

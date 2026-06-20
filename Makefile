@@ -1,5 +1,6 @@
+K3_TYPE ?= k3d
 CLUSTER_NAME ?= homelab
-K3D_ARGS ?= --servers 1 --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
+K3_ARGS ?= --servers 1 --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
 REPO_URL ?= git@github.com:Spuntininki/homelab-infra.git
 REPO_SECRET_NAME ?= homelab-infra-repo
 REPO_SSH_KEY_FILE ?= $(HOME)/.ssh/id_ed25519_argocd
@@ -8,23 +9,23 @@ REPO_SSH_KEY_FILE ?= $(HOME)/.ssh/id_ed25519_argocd
 
 help:
 	@printf '%s\n' "Targets:" \
-		"  make create     Create the k3d cluster" \
+		"  make create     Create the $(K3_TYPE) cluster" \
 		"  make kubeconfig Update kubeconfig and switch context" \
 		"  make bootstrap  Apply the Argo CD bootstrap" \
 		"  make repo-secret Register the Git repository credential" \
 		"  make status     Show Argo CD applications" \
 		"  make verify     Run basic cluster checks" \
-		"  make delete     Delete the k3d cluster" \
+		"  make delete     Delete the $(K3_TYPE) cluster" \
 		"  make clean      Delete the cluster and prune kubeconfig entries" \
 		"  make recreate   Delete, create, and bootstrap again"
 
 create:
-	k3d cluster create $(CLUSTER_NAME) $(K3D_ARGS)
+	$(K3_TYPE) cluster create $(CLUSTER_NAME) $(K3_ARGS)
 	$(MAKE) kubeconfig
 	$(MAKE) bootstrap
 
 kubeconfig:
-	k3d kubeconfig merge $(CLUSTER_NAME) --kubeconfig-switch-context
+	$(K3_TYPE) kubeconfig merge $(CLUSTER_NAME) --kubeconfig-switch-context
 
 bootstrap:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
@@ -48,9 +49,9 @@ status:
 	kubectl get applications -n argocd -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,REPO:.spec.source.repoURL,PATH:.spec.source.path
 
 delete:
-	k3d cluster delete $(CLUSTER_NAME)
-	kubectl config delete-context k3d-$(CLUSTER_NAME) >/dev/null 2>&1 || true
-	kubectl config delete-cluster k3d-$(CLUSTER_NAME) >/dev/null 2>&1 || true
-	kubectl config delete-user k3d-$(CLUSTER_NAME) >/dev/null 2>&1 || true
+	$(K3_TYPE) cluster delete $(CLUSTER_NAME)
+	kubectl config delete-context $(K3_TYPE)-$(CLUSTER_NAME) >/dev/null 2>&1 || true
+	kubectl config delete-cluster $(K3_TYPE)-$(CLUSTER_NAME) >/dev/null 2>&1 || true
+	kubectl config delete-user $(K3_TYPE)-$(CLUSTER_NAME) >/dev/null 2>&1 || true
 	
 recreate: delete create bootstrap
