@@ -11,7 +11,7 @@ export VAULT_ADDR VAULT_TOKEN
 
 echo "==> Aguardando Vault ficar pronto em ${VAULT_ADDR}..."
 for i in {1..30}; do
-  if docker exec vault vault status >/dev/null 2>&1; then
+  if docker exec -e VAULT_ADDR="${VAULT_ADDR}" vault vault status >/dev/null 2>&1; then
     echo "==> Vault pronto."
     break
   fi
@@ -19,27 +19,27 @@ for i in {1..30}; do
   sleep 2
 done
 
-if ! docker exec vault vault status >/dev/null 2>&1; then
+if ! docker exec -e VAULT_ADDR="${VAULT_ADDR}" vault vault status >/dev/null 2>&1; then
   echo "==> ERRO: Vault não ficou pronto a tempo." >&2
   exit 1
 fi
 
 echo "==> Habilitando KV v2 em 'secret/'..."
-docker exec -e VAULT_TOKEN="${VAULT_TOKEN}" vault vault secrets enable -path=secret -version=2 kv || true
+docker exec -e VAULT_ADDR="${VAULT_ADDR}" -e VAULT_TOKEN="${VAULT_TOKEN}" vault vault secrets enable -path=secret -version=2 kv || true
 
 echo "==> Criando policy 'external-secrets-policy'..."
-docker exec -i -e VAULT_TOKEN="${VAULT_TOKEN}" vault vault policy write external-secrets-policy - <<'EOF'
+docker exec -i -e VAULT_ADDR="${VAULT_ADDR}" -e VAULT_TOKEN="${VAULT_TOKEN}" vault vault policy write external-secrets-policy - <<'EOF'
 path "secret/data/*" {
   capabilities = ["read"]
 }
 EOF
 
 echo "==> Criando token para o External Secrets Operator..."
-ESO_TOKEN=$(docker exec -e VAULT_TOKEN="${VAULT_TOKEN}" vault vault token create \
+ESO_TOKEN=$(docker exec -e VAULT_ADDR="${VAULT_ADDR}" -e VAULT_TOKEN="${VAULT_TOKEN}" vault vault token create \
   -policy=external-secrets-policy \
   -display-name=external-secrets \
   -no-default-policy \
-  -field=client_token)
+  -field=token)
 
 mkdir -p "${SCRIPT_DIR}"
 printf '%s' "${ESO_TOKEN}" > "${SCRIPT_DIR}/eso-token.txt"
