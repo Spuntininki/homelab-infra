@@ -101,3 +101,59 @@ Recreate the cluster from scratch:
 ```bash
 make recreate
 ```
+
+## Secret management with HashiCorp Vault
+
+This homelab uses [HashiCorp Vault](https://www.vaultproject.io/) running in Docker **outside** the Kubernetes cluster. The [External Secrets Operator](https://external-secrets.io/) syncs secrets from Vault into Kubernetes `Secret` resources.
+
+### Start Vault
+
+> Requires the k3d cluster to be running, because Vault attaches to the k3d Docker network (`k3d-homelab`).
+
+```bash
+make vault-up
+```
+
+### Bootstrap Vault
+
+This enables the KV v2 secrets engine, creates a read-only policy, and generates a token for External Secrets Operator:
+
+```bash
+make vault-bootstrap
+```
+
+The token is saved locally to `docker/vault/eso-token.txt` and is **not** committed to Git.
+
+### Provide the Vault token to Kubernetes
+
+Apply the token as a Kubernetes Secret manually (Option A):
+
+```bash
+kubectl create secret generic vault-token \
+  -n external-secrets \
+  --from-literal=token="$(cat docker/vault/eso-token.txt)" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+### Validate the integration
+
+Create a demo secret in Vault:
+
+```bash
+docker exec -e VAULT_TOKEN=root vault vault kv put secret/demo username=admin password=supersecret
+```
+
+Wait for External Secrets Operator to sync, then verify:
+
+```bash
+kubectl get externalsecret -n vault-demo
+kubectl get secret vault-demo-secret -n vault-demo -o jsonpath='{.data.username}' | base64 -d
+```
+
+### Useful commands
+
+```bash
+make vault-status    # Show Vault status
+make vault-token     # Print the ESO token
+make vault-down      # Stop Vault container
+```

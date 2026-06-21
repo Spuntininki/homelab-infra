@@ -5,7 +5,12 @@ REPO_URL ?= git@github.com:Spuntininki/homelab-infra.git
 REPO_SECRET_NAME ?= homelab-infra-repo
 REPO_SSH_KEY_FILE ?= $(HOME)/.ssh/id_ed25519_argocd
 
-.PHONY: help create delete recreate bootstrap status kubeconfig verify clean repo-secret
+VAULT_DIR ?= docker/vault
+VAULT_NETWORK ?= k3d-$(CLUSTER_NAME)
+VAULT_TOKEN_FILE ?= $(VAULT_DIR)/eso-token.txt
+
+.PHONY: help create delete recreate bootstrap status kubeconfig verify clean repo-secret \
+  vault-up vault-down vault-bootstrap vault-status vault-token
 
 help:
 	@printf '%s\n' "Targets:" \
@@ -55,3 +60,21 @@ delete:
 	kubectl config delete-user $(K3_TYPE)-$(CLUSTER_NAME) >/dev/null 2>&1 || true
 	
 recreate: delete create bootstrap
+
+# HashiCorp Vault (runs in Docker, outside the k3d cluster)
+vault-up:
+	@docker network inspect $(VAULT_NETWORK) >/dev/null 2>&1 || { echo "Network $(VAULT_NETWORK) not found. Create the cluster first with 'make create'." >&2; exit 1; }
+	docker compose -f $(VAULT_DIR)/docker-compose.yaml up -d
+
+vault-down:
+	docker compose -f $(VAULT_DIR)/docker-compose.yaml down
+
+vault-bootstrap:
+	./$(VAULT_DIR)/vault-bootstrap.sh
+
+vault-status:
+	@docker exec vault vault status || true
+
+vault-token:
+	@test -f $(VAULT_TOKEN_FILE) || { echo "Token file not found. Run 'make vault-bootstrap' first." >&2; exit 1; }
+	@cat $(VAULT_TOKEN_FILE)
