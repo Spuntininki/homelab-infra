@@ -1,0 +1,21 @@
+# Plaintext secrets and temporary sealing files
+*.secret.yaml
+*.plaintext.yaml
+/sealed-secrets-pub.crt
+
+# SSH keys
+*.pem
+id_*
+!id_*.pub
+
+# Helm chart artifacts
+*.tgz
+charts/*/charts/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
