@@ -18,8 +18,3 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-  ignoreDifferences:
-  - group: argoproj.io
-    kind: Application
-    jqPathExpressions:
-      - '.metadata.annotations["argocd.argoproj.io/tracking-id"]'
