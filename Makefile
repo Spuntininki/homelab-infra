@@ -32,7 +32,6 @@ create:
 	$(MAKE) bootstrap
 	$(MAKE) vault-up
 	$(MAKE) vault-bootstrap
-	$(MAKE) vault-inject-token
 
 kubeconfig:
 	$(K3_TYPE) kubeconfig merge $(CLUSTER_NAME) --kubeconfig-switch-context
@@ -76,13 +75,12 @@ vault-down:
 
 vault-bootstrap:
 	./$(VAULT_DIR)/vault-bootstrap.sh
+	$(MAKE) vault-inject-token
 
 vault-status:
-	@docker exec vault vault status || true
-
+	@docker exec -e VAULT_ADDR=http://127.0.0.1:8200 vault vault status || true
 vault-token:
-	@test -f $(VAULT_TOKEN_FILE) || { echo "Token file not found. Run 'make vault-bootstrap' first." >&2; exit 1; }
-	@cat $(VAULT_TOKEN_FILE)
+	@test -f $(VAULT_TOKEN_FILE) && cat $(VAULT_TOKEN_FILE) || { echo "Token file not found. Run 'make vault-bootstrap' first." >&2; exit 0; }
 
 vault-inject-token:
 	@test -f $(VAULT_TOKEN_FILE) || { echo "Token file not found. Run 'make vault-bootstrap' first." >&2; exit 1; }
