@@ -25,6 +25,55 @@ manifests/
 5. The `platform` app creates all apps under `apps/platform/`
 6. Everything stays in sync with Git automatically
 
+## Adding a new Git repository
+
+This homelab follows the app-of-apps pattern. The root Application (`bootstrap/argocd/root-application.yaml`) watches `clusters/local/`, and every Argo CD Application placed there is automatically synced.
+
+### Recommended: separate repository
+
+To add a new standalone repository, create a new Application manifest under `clusters/local/`:
+
+```yaml
+# clusters/local/myapp-application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:your-user/myapp-infra.git
+    targetRevision: HEAD
+    path: clusters/local
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
+
+Then register the repository SSH credential:
+
+```bash
+kubectl -n argocd create secret generic myapp-repo-secret \
+  --from-literal=url="git@github.com:your-user/myapp-infra.git" \
+  --from-file=sshPrivateKey="$HOME/.ssh/id_ed25519_myapp" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl -n argocd label secret myapp-repo-secret argocd.argoproj.io/secret-type=repository --overwrite
+```
+
+### Alternative: add inside this repository
+
+You can also add a new Application under `apps/platform/<app>/` if it is part of the platform base. The existing `platform` Application will pick it up automatically.
+
 ## Local workflow
 
 ### Requirements
@@ -156,6 +205,58 @@ Wait for External Secrets Operator to sync, then verify:
 kubectl get externalsecret -n vault-demo
 kubectl get secret vault-demo-secret -n vault-demo -o jsonpath='{.data.username}' | base64 -d
 ```
+
+### Using a Vault secret in an application
+
+1. Create the secret in Vault:
+
+```bash
+docker exec -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN=root \
+  vault vault kv put secret/myapp/database \
+    host=postgres.myapp.svc user=appuser password=changeme
+```
+
+2. Add an `ExternalSecret` to your application manifests:
+
+```yaml
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: myapp-database
+  namespace: myapp
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-backend
+  target:
+    name: database-secret
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: DB_HOST
+      remoteRef:
+        key: secret/myapp/database
+        property: host
+    - secretKey: DB_USER
+      remoteRef:
+        key: secret/myapp/database
+        property: user
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: secret/myapp/database
+        property: password
+```
+
+3. Reference the generated Kubernetes Secret in your Deployment:
+
+```yaml
+envFrom:
+  - secretRef:
+      name: database-secret
+```
+
+> Only commit the `ExternalSecret`. The generated `Secret` is created at runtime and must not be committed.
 
 ### Useful commands
 

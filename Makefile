@@ -4,6 +4,8 @@ K3_ARGS ?= --servers 1 --port "8080:80@loadbalancer" --port "8443:443@loadbalanc
 REPO_URL ?= git@github.com:Spuntininki/homelab-infra.git
 REPO_SECRET_NAME ?= homelab-infra-repo
 REPO_SSH_KEY_FILE ?= $(HOME)/.ssh/id_ed25519_argocd
+ARGOCD_VERSION ?= v3.4.4
+
 
 VAULT_DIR ?= docker/vault
 VAULT_NETWORK ?= k3d-$(CLUSTER_NAME)
@@ -34,7 +36,7 @@ kubeconfig:
 
 bootstrap:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-	kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+	kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/$(ARGOCD_VERSION)/manifests/install.yaml
 	kubectl wait --for=condition=Established crd/applications.argoproj.io --timeout=180s
 	$(MAKE) repo-secret
 	kubectl apply -k bootstrap/argocd
