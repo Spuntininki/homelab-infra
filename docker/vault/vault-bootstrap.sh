@@ -32,6 +32,10 @@ docker exec -i -e VAULT_ADDR="${VAULT_ADDR}" -e VAULT_TOKEN="${VAULT_TOKEN}" vau
 path "secret/data/*" {
   capabilities = ["read"]
 }
+
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
 EOF
 
 echo "==> Criando token para o External Secrets Operator..."

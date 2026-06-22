@@ -4,4 +4,4 @@ resources:
   - sealed-secrets
   - headlamp
   - external-secrets
-  - vault-integration
+  - vault-integration/application.yaml
