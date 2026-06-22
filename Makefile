@@ -30,6 +30,9 @@ create:
 	$(K3_TYPE) cluster create $(CLUSTER_NAME) $(K3_ARGS)
 	$(MAKE) kubeconfig
 	$(MAKE) bootstrap
+	$(MAKE) vault-up
+	$(MAKE) vault-bootstrap
+	$(MAKE) vault-inject-token
 
 kubeconfig:
 	$(K3_TYPE) kubeconfig merge $(CLUSTER_NAME) --kubeconfig-switch-context
@@ -61,7 +64,7 @@ delete:
 	kubectl config delete-cluster $(K3_TYPE)-$(CLUSTER_NAME) >/dev/null 2>&1 || true
 	kubectl config delete-user $(K3_TYPE)-$(CLUSTER_NAME) >/dev/null 2>&1 || true
 	
-recreate: delete create bootstrap
+recreate: delete create
 
 # HashiCorp Vault (runs in Docker, outside the k3d cluster)
 vault-up:
@@ -80,3 +83,11 @@ vault-status:
 vault-token:
 	@test -f $(VAULT_TOKEN_FILE) || { echo "Token file not found. Run 'make vault-bootstrap' first." >&2; exit 1; }
 	@cat $(VAULT_TOKEN_FILE)
+
+vault-inject-token:
+	@test -f $(VAULT_TOKEN_FILE) || { echo "Token file not found. Run 'make vault-bootstrap' first." >&2; exit 1; }
+	kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
+	kubectl create secret generic vault-token \
+		-n external-secrets \
+		--from-literal=token="$$(cat $(VAULT_TOKEN_FILE))" \
+		--dry-run=client -o yaml | kubectl apply -f -
