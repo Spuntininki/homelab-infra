@@ -43,6 +43,7 @@ ESO_TOKEN=$(docker exec -e VAULT_ADDR="${VAULT_ADDR}" -e VAULT_TOKEN="${VAULT_TO
   -policy=external-secrets-policy \
   -display-name=external-secrets \
   -no-default-policy \
+  -period=768h \
   -field=token)
 
 mkdir -p "${SCRIPT_DIR}"
