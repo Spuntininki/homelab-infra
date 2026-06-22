@@ -104,14 +104,21 @@ make recreate
 
 ## Secret management with HashiCorp Vault
 
-This homelab uses [HashiCorp Vault](https://www.vaultproject.io/) running in Docker **outside** the Kubernetes cluster. The [External Secrets Operator](https://external-secrets.io/) syncs secrets from Vault into Kubernetes `Secret` resources.
+For simplicity, this homelab runs [HashiCorp Vault](https://www.vaultproject.io/) in Docker **outside** the Kubernetes cluster. This setup emulates a production environment where secrets are managed by an external secret store rather than inside Kubernetes. The [External Secrets Operator](https://external-secrets.io/) syncs secrets from Vault into standard Kubernetes `Secret` resources.
 
 ### Start Vault
 
-> Requires the k3d cluster to be running, because Vault attaches to the k3d Docker network (`k3d-homelab`).
+> Requires the k3d cluster to be running, because Vault attaches to the k3d Docker network (`k3d-homelab` by default).
 
 ```bash
 make vault-up
+```
+
+To use a different Docker network, create `docker/vault/.env` from `.env.example` and set `VAULT_NETWORK`:
+
+```bash
+cp docker/vault/.env.example docker/vault/.env
+# edit VAULT_NETWORK in docker/vault/.env
 ```
 
 ### Bootstrap Vault

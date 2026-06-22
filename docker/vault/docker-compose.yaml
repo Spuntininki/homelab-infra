@@ -13,8 +13,6 @@ services:
       VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
     volumes:
       - vault-data:/vault/file
-    networks:
-      - k3d-homelab
     healthcheck:
       test: ["CMD-SHELL", "VAULT_ADDR=http://127.0.0.1:8200 vault status"]
       interval: 10s
@@ -25,5 +23,6 @@ volumes:
   vault-data:
 
 networks:
-  k3d-homelab:
+  default:
+    name: ${VAULT_NETWORK:-k3d-homelab}
     external: true
