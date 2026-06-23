@@ -191,21 +191,6 @@ kubectl create secret generic vault-token \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-### Validate the integration
-
-Create a demo secret in Vault:
-
-```bash
-docker exec -e VAULT_TOKEN=root vault vault kv put secret/demo username=admin password=supersecret
-```
-
-Wait for External Secrets Operator to sync, then verify:
-
-```bash
-kubectl get externalsecret -n vault-demo
-kubectl get secret vault-demo-secret -n vault-demo -o jsonpath='{.data.username}' | base64 -d
-```
-
 ### Using a Vault secret in an application
 
 1. Create the secret in Vault:
