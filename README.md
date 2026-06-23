@@ -258,6 +258,44 @@ envFrom:
 
 > Only commit the `ExternalSecret`. The generated `Secret` is created at runtime and must not be committed.
 
+## TLS and Ingress
+
+The cluster uses **Traefik** (default in k3d/k3s) as the ingress controller and **cert-manager** with a self-signed `ClusterIssuer` to provide TLS for internal services.
+
+This setup is intentionally LAN-only. The domain `sputinik.tech` is used for friendly URLs, but the services are not exposed to the internet. Because the certificates are self-signed, browsers will show a warning on first access; accept the exception to proceed.
+
+### Exposed services
+
+| Service | URL |
+|---|---|
+| Argo CD | `https://argocd.sputinik.tech:8443` |
+| Headlamp | `https://headlamp.sputinik.tech:8443` |
+
+### Local DNS (k3d)
+
+Add the following entry to `/etc/hosts` on the machine that accesses the cluster:
+
+```text
+127.0.0.1 argocd.sputinik.tech headlamp.sputinik.tech
+```
+
+The k3d load balancer maps host port `8443` to Traefik port `443`.
+
+### DNS on k3s (future)
+
+When migrating to k3s, point the same hostnames in your LAN DNS (router, Pi-hole, etc.) to the k3s node IP or MetalLB IP, then access the services on standard port `443`:
+
+```text
+https://argocd.sputinik.tech
+https://headlamp.sputinik.tech
+```
+
+No manifest changes are required; only the DNS target changes.
+
+### Migrating to a public certificate
+
+When you are ready to expose services to the internet, replace the `selfsigned-issuer` `ClusterIssuer` with a Let's Encrypt issuer (HTTP-01 or DNS-01) and update the `cert-manager.io/cluster-issuer` annotation on the ingresses. The rest of the configuration remains the same.
+
 ### Useful commands
 
 ```bash
