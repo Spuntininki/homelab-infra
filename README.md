@@ -292,6 +292,14 @@ https://headlamp.sputinik.tech
 
 No manifest changes are required; only the DNS target changes.
 
+### Argo CD behind the ingress
+
+The Argo CD server is configured to run in **insecure mode** (`server.insecure: "true"`) so that Traefik terminates TLS and talks HTTP to the backend. If you change the ingress configuration, you may need to restart the Argo CD server deployment:
+
+```bash
+kubectl rollout restart deployment argocd-server -n argocd
+```
+
 ### Migrating to a public certificate
 
 When you are ready to expose services to the internet, replace the `selfsigned-issuer` `ClusterIssuer` with a Let's Encrypt issuer (HTTP-01 or DNS-01) and update the `cert-manager.io/cluster-issuer` annotation on the ingresses. The rest of the configuration remains the same.

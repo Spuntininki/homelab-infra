@@ -6,4 +6,4 @@ resources:
   - external-secrets
   - vault-integration/application.yaml
   - headlamp
-  - argocd-ingress
+  - argocd-ingress/application.yaml
