@@ -20,17 +20,12 @@ spec:
           enabled: true
           ingressClassName: traefik
           annotations:
-            cert-manager.io/cluster-issuer: selfsigned-issuer
             traefik.ingress.kubernetes.io/router.entrypoints: web
           hosts:
             - host: headlamp.sputinik.tech
               paths:
                 - path: /
                   type: Prefix
-          tls:
-            - hosts:
-                - headlamp.sputinik.tech
-              secretName: headlamp-tls
   destination:
     server: https://kubernetes.default.svc
     namespace: headlamp

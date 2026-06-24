@@ -4,14 +4,9 @@ metadata:
   name: argocd-server
   namespace: argocd
   annotations:
-    cert-manager.io/cluster-issuer: selfsigned-issuer
     traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
   ingressClassName: traefik
-  tls:
-    - hosts:
-        - argocd.sputinik.tech
-      secretName: argocd-tls
   rules:
     - host: argocd.sputinik.tech
       http:
