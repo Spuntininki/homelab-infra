@@ -16,7 +16,7 @@ VAULT_DIR ?= docker/vault
 VAULT_TOKEN_FILE ?= $(VAULT_DIR)/eso-token.txt
 
 .PHONY: help create delete recreate bootstrap status kubeconfig verify clean repo-secret \
-  vault-up vault-down vault-bootstrap vault-status vault-token
+  vault-up vault-down vault-bootstrap vault-status vault-token vault-k3s-routing
 
 help:
 	@printf '%s\n' "Targets:" \
@@ -46,6 +46,7 @@ endif
 	$(MAKE) kubeconfig K3S_NODE_IP=$(K3S_NODE_IP)
 	$(MAKE) bootstrap
 	$(MAKE) vault-up
+	$(MAKE) vault-k3s-routing K3S_NODE_IP=$(K3S_NODE_IP)
 	$(MAKE) vault-bootstrap
 
 kubeconfig:
@@ -97,8 +98,37 @@ recreate: delete create
 
 # HashiCorp Vault (runs in Docker, outside the k3d cluster)
 vault-up:
-	@docker network inspect $(VAULT_NETWORK) >/dev/null 2>&1 || { echo "Network $(VAULT_NETWORK) not found. Create the cluster first with 'make create'." >&2; exit 1; }
+	@docker network inspect $(VAULT_NETWORK) >/dev/null 2>&1 || docker network create $(VAULT_NETWORK)
 	docker compose -f $(VAULT_DIR)/docker-compose.yaml up -d
+
+# On k3s, pods cannot reach the Vault Docker container by hostname. Create a Service + Endpoints
+# in the external-secrets namespace so the External Secrets Operator can resolve 'vault:8200'.
+vault-k3s-routing:
+ifeq ($(K3_TYPE),k3s)
+	@test -n "$(K3S_NODE_IP)" || { echo "K3S_NODE_IP is required for k3s Vault routing." >&2; exit 1; }
+	@kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f -
+	@printf '%s\n' \
+		"apiVersion: v1" \
+		"kind: Endpoints" \
+		"metadata:" \
+		"  name: vault" \
+		"  namespace: external-secrets" \
+		"subsets:" \
+		"  - addresses:" \
+		"      - ip: $(K3S_NODE_IP)" \
+		"    ports:" \
+		"      - port: 8200" \
+		"---" \
+		"apiVersion: v1" \
+		"kind: Service" \
+		"metadata:" \
+		"  name: vault" \
+		"  namespace: external-secrets" \
+		"spec:" \
+		"  ports:" \
+		"    - port: 8200" \
+		| kubectl apply -f -
+endif
 
 vault-down:
 	docker compose -f $(VAULT_DIR)/docker-compose.yaml down
