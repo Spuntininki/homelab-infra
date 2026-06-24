@@ -1,6 +1,7 @@
 K3_TYPE ?= k3d
 CLUSTER_NAME ?= homelab
-K3_ARGS ?= --servers 1 --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
+VAULT_NETWORK ?= k3-$(CLUSTER_NAME)
+K3_ARGS ?= --servers 1 --network $(VAULT_NETWORK) --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
 REPO_URL ?= git@github.com:Spuntininki/homelab-infra.git
 REPO_SECRET_NAME ?= homelab-infra-repo
 REPO_SSH_KEY_FILE ?= $(HOME)/.ssh/id_ed25519_argocd
@@ -8,7 +9,6 @@ ARGOCD_VERSION ?= v3.4.4
 
 
 VAULT_DIR ?= docker/vault
-VAULT_NETWORK ?= k3d-$(CLUSTER_NAME)
 VAULT_TOKEN_FILE ?= $(VAULT_DIR)/eso-token.txt
 
 .PHONY: help create delete recreate bootstrap status kubeconfig verify clean repo-secret \
