@@ -35,12 +35,15 @@ help:
 		"  K3_TYPE=k3s K3S_NODE_IP=1.2.3.4 make create"
 
 create:
+ifeq ($(K3_TYPE),k3s)
+	@test -n "$(K3S_NODE_IP)" || { echo "K3S_NODE_IP is required for k3s. Example: K3_TYPE=k3s K3S_NODE_IP=1.2.3.4 make create" >&2; exit 1; }
+endif
 ifeq ($(K3_TYPE),k3d)
 	$(K3_TYPE) cluster create $(CLUSTER_NAME) $(K3_ARGS)
 else ifeq ($(K3_TYPE),k3s)
 	curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server $(K3_ARGS)" sh -
 endif
-	$(MAKE) kubeconfig
+	$(MAKE) kubeconfig K3S_NODE_IP=$(K3S_NODE_IP)
 	$(MAKE) bootstrap
 	$(MAKE) vault-up
 	$(MAKE) vault-bootstrap
@@ -51,10 +54,12 @@ ifeq ($(K3_TYPE),k3d)
 else ifeq ($(K3_TYPE),k3s)
 	@test -n "$(K3S_NODE_IP)" || { echo "K3S_NODE_IP is required for k3s kubeconfig. Example: K3S_NODE_IP=1.2.3.4 make kubeconfig" >&2; exit 1; }
 	mkdir -p $(HOME)/.kube
-	cp /etc/rancher/k3s/k3s.yaml $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)
+	sudo cp /etc/rancher/k3s/k3s.yaml $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)
+	sudo chown $(USER):$(USER) $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)
 	sed -i 's/127\.0\.0\.1/$(K3S_NODE_IP)/g' $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)
-	@echo "Kubeconfig saved to $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)"
-	@echo "Use: export KUBECONFIG=$(HOME)/.kube/config-k3s-$(CLUSTER_NAME)"
+	cp $(HOME)/.kube/config-k3s-$(CLUSTER_NAME) $(HOME)/.kube/config
+	chmod 600 $(HOME)/.kube/config
+	@echo "Kubeconfig saved to $(HOME)/.kube/config"
 endif
 
 bootstrap:
