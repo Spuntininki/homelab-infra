@@ -289,6 +289,43 @@ kubectl rollout restart deployment argocd-server -n argocd
 
 When you are ready to expose services to the internet, replace the `selfsigned-issuer` `ClusterIssuer` with a Let's Encrypt issuer (HTTP-01 or DNS-01) and update the `cert-manager.io/cluster-issuer` annotation on the ingresses. The rest of the configuration remains the same.
 
+## Exposing services to the internet with Cloudflare Tunnel
+
+The repository includes a `cloudflared` deployment that creates an outbound tunnel to Cloudflare. This allows exposing services without opening inbound ports on your firewall.
+
+### Requirements
+
+- A Cloudflare account.
+- The domain `sputinik.tech` managed by Cloudflare.
+- The Cloudflare Tunnel token stored in Vault at `secret/cloudflare` under the key `TUNNEL_TOKEN`.
+
+### How it works
+
+```text
+user → Cloudflare → cloudflared (inside k3d/k3s) → Traefik → service
+```
+
+Because the tunnel is initiated from inside the cluster, no inbound firewall rules are required.
+
+### Configure public hostnames
+
+In the Cloudflare Zero Trust dashboard, inside your tunnel, add the following hostnames pointing to the internal Traefik service:
+
+| Subdomain | Type | URL |
+|---|---|---|
+| `argocd.sputinik.tech` | HTTP | `http://traefik.kube-system.svc.cluster.local` |
+| `headlamp.sputinik.tech` | HTTP | `http://traefik.kube-system.svc.cluster.local` |
+
+The Traefik ingress controller uses the `Host` header to route each request to the correct service.
+
+### TLS mode
+
+Set the Cloudflare TLS mode to **Full**. This makes Cloudflare accept the cluster's self-signed certificate on the internal connection while presenting a valid certificate to users.
+
+### Same manifests on k3d and k3s
+
+The `cloudflared` manifests work unchanged on both k3d and k3s because they reference Traefik via internal cluster DNS (`traefik.kube-system.svc.cluster.local`). When migrating to k3s, just ensure the same tunnel token is available in Vault and that the `vault-integration` app is synced.
+
 ### Useful commands
 
 ```bash

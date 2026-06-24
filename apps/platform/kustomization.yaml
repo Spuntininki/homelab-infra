@@ -7,3 +7,4 @@ resources:
   - vault-integration/application.yaml
   - headlamp
   - argocd-ingress/application.yaml
+  - cloudflared/application.yaml
