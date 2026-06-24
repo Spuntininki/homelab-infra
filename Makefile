@@ -1,7 +1,11 @@
 K3_TYPE ?= k3d
 CLUSTER_NAME ?= homelab
 VAULT_NETWORK ?= k3-$(CLUSTER_NAME)
-K3_ARGS ?= --servers 1 --network $(VAULT_NETWORK) --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
+ifeq ($(K3_TYPE),k3d)
+  K3_ARGS ?= --servers 1 --network $(VAULT_NETWORK) --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
+else
+  K3_ARGS ?=
+endif
 REPO_URL ?= git@github.com:Spuntininki/homelab-infra.git
 REPO_SECRET_NAME ?= homelab-infra-repo
 REPO_SSH_KEY_FILE ?= $(HOME)/.ssh/id_ed25519_argocd
@@ -16,25 +20,42 @@ VAULT_TOKEN_FILE ?= $(VAULT_DIR)/eso-token.txt
 
 help:
 	@printf '%s\n' "Targets:" \
-		"  make create     Create the $(K3_TYPE) cluster" \
+		"  make create     Create the $(K3_TYPE) cluster (k3d) or install k3s" \
 		"  make kubeconfig Update kubeconfig and switch context" \
 		"  make bootstrap  Apply the Argo CD bootstrap" \
 		"  make repo-secret Register the Git repository credential" \
 		"  make status     Show Argo CD applications" \
 		"  make verify     Run basic cluster checks" \
-		"  make delete     Delete the $(K3_TYPE) cluster" \
+		"  make delete     Delete the $(K3_TYPE) cluster (k3d) or uninstall k3s" \
 		"  make clean      Delete the cluster and prune kubeconfig entries" \
-		"  make recreate   Delete, create, and bootstrap again"
+		"  make recreate   Delete, create, and bootstrap again" \
+		"" \
+		"Examples:" \
+		"  make create                         # Uses k3d by default" \
+		"  K3_TYPE=k3s K3S_NODE_IP=1.2.3.4 make create"
 
 create:
+ifeq ($(K3_TYPE),k3d)
 	$(K3_TYPE) cluster create $(CLUSTER_NAME) $(K3_ARGS)
+else ifeq ($(K3_TYPE),k3s)
+	curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server $(K3_ARGS)" sh -
+endif
 	$(MAKE) kubeconfig
 	$(MAKE) bootstrap
 	$(MAKE) vault-up
 	$(MAKE) vault-bootstrap
 
 kubeconfig:
+ifeq ($(K3_TYPE),k3d)
 	$(K3_TYPE) kubeconfig merge $(CLUSTER_NAME) --kubeconfig-switch-context
+else ifeq ($(K3_TYPE),k3s)
+	@test -n "$(K3S_NODE_IP)" || { echo "K3S_NODE_IP is required for k3s kubeconfig. Example: K3S_NODE_IP=1.2.3.4 make kubeconfig" >&2; exit 1; }
+	mkdir -p $(HOME)/.kube
+	cp /etc/rancher/k3s/k3s.yaml $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)
+	sed -i 's/127\.0\.0\.1/$(K3S_NODE_IP)/g' $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)
+	@echo "Kubeconfig saved to $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)"
+	@echo "Use: export KUBECONFIG=$(HOME)/.kube/config-k3s-$(CLUSTER_NAME)"
+endif
 
 bootstrap:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
@@ -58,11 +79,15 @@ status:
 	kubectl get applications -n argocd -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,REPO:.spec.source.repoURL,PATH:.spec.source.path
 
 delete:
+ifeq ($(K3_TYPE),k3d)
 	$(K3_TYPE) cluster delete $(CLUSTER_NAME)
+else ifeq ($(K3_TYPE),k3s)
+	/usr/local/bin/k3s-uninstall.sh
+endif
 	kubectl config delete-context $(K3_TYPE)-$(CLUSTER_NAME) >/dev/null 2>&1 || true
 	kubectl config delete-cluster $(K3_TYPE)-$(CLUSTER_NAME) >/dev/null 2>&1 || true
 	kubectl config delete-user $(K3_TYPE)-$(CLUSTER_NAME) >/dev/null 2>&1 || true
-	
+
 recreate: delete create
 
 # HashiCorp Vault (runs in Docker, outside the k3d cluster)
