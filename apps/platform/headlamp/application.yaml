@@ -21,7 +21,7 @@ spec:
           ingressClassName: traefik
           annotations:
             cert-manager.io/cluster-issuer: selfsigned-issuer
-            traefik.ingress.kubernetes.io/router.entrypoints: websecure
+            traefik.ingress.kubernetes.io/router.entrypoints: web
           hosts:
             - host: headlamp.sputinik.tech
               paths:
