@@ -22,9 +22,10 @@ spec:
             - tunnel
             - --no-autoupdate
             - run
-            - --no-tls-verify
             - --token
             - $(TUNNEL_TOKEN)
+            - --config
+            - /etc/cloudflared/config.yaml
           env:
             - name: TUNNEL_TOKEN
               valueFrom:
@@ -57,3 +58,11 @@ spec:
             limits:
               cpu: 200m
               memory: 128Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared-config

@@ -346,16 +346,26 @@ user → Cloudflare → cloudflared (inside k3d/k3s) → Traefik → service
 
 Because the tunnel is initiated from inside the cluster, no inbound firewall rules are required.
 
-### Configure public hostnames
+### Tunnel configuration
 
-In the Cloudflare Zero Trust dashboard, inside your tunnel, add the following hostnames pointing to the internal Traefik service:
+The ingress rules for the tunnel are defined in the repository at `apps/platform/cloudflared/config.yaml`:
 
-| Subdomain | Type | URL |
-|---|---|---|
-| `argocd.sputinik.tech` | HTTPS | `https://traefik.kube-system.svc.cluster.local` |
-| `headlamp.sputinik.tech` | HTTPS | `https://traefik.kube-system.svc.cluster.local` |
+```yaml
+ingress:
+  - hostname: argocd.sputinik.tech
+    service: https://traefik.kube-system.svc.cluster.local
+    originRequest:
+      noTLSVerify: true
+  - hostname: headlamp.sputinik.tech
+    service: https://traefik.kube-system.svc.cluster.local
+    originRequest:
+      noTLSVerify: true
+  - service: http_status:404
+```
 
-The Traefik ingress controller uses the `Host` header and the TLS SNI to route each request to the correct service.
+The `noTLSVerify` option is required because the cluster uses a self-signed certificate. The connection from the user to Cloudflare remains encrypted with a valid certificate.
+
+In the Cloudflare Zero Trust dashboard you only need to create the tunnel and copy its token to Vault. The public hostnames themselves are managed by the config file above; do not configure them manually in the dashboard, or keep them empty to avoid conflicts.
 
 ### TLS mode
 
