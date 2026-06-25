@@ -23,8 +23,6 @@ spec:
             - --no-autoupdate
             - run
             - --no-tls-verify
-            - --metrics
-            - 0.0.0.0:2000
             - --token
             - $(TUNNEL_TOKEN)
           env:
@@ -33,6 +31,8 @@ spec:
                 secretKeyRef:
                   name: cloudflared-token
                   key: token
+            - name: TUNNEL_METRICS
+              value: 0.0.0.0:2000
           ports:
             - name: metrics
               containerPort: 2000
