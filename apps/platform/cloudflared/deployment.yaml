@@ -20,7 +20,6 @@ spec:
           image: cloudflare/cloudflared:2025.6.0
           args:
             - tunnel
-            - --config=/etc/cloudflared/config.yaml
             - --no-autoupdate
             - run
             - --token
@@ -57,11 +56,3 @@ spec:
             limits:
               cpu: 200m
               memory: 128Mi
-          volumeMounts:
-            - name: config
-              mountPath: /etc/cloudflared
-              readOnly: true
-      volumes:
-        - name: config
-          configMap:
-            name: cloudflared-config
