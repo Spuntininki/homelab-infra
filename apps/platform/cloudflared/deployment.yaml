@@ -20,12 +20,12 @@ spec:
           image: cloudflare/cloudflared:2025.6.0
           args:
             - tunnel
+            - --config
+            - /etc/cloudflared/config.yaml
             - --no-autoupdate
             - run
             - --token
             - $(TUNNEL_TOKEN)
-            - --config
-            - /etc/cloudflared/config.yaml
           env:
             - name: TUNNEL_TOKEN
               valueFrom:
