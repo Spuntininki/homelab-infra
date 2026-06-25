@@ -348,24 +348,16 @@ Because the tunnel is initiated from inside the cluster, no inbound firewall rul
 
 ### Tunnel configuration
 
-The ingress rules for the tunnel are defined in the repository at `apps/platform/cloudflared/config.yaml`:
+The tunnel is **remotely managed** from the Cloudflare Zero Trust dashboard. The manifest only runs the `cloudflared` connector; the ingress rules live in Cloudflare.
 
-```yaml
-ingress:
-  - hostname: argocd.sputinik.tech
-    service: https://traefik.kube-system.svc.cluster.local
-    originRequest:
-      noTLSVerify: true
-  - hostname: headlamp.sputinik.tech
-    service: https://traefik.kube-system.svc.cluster.local
-    originRequest:
-      noTLSVerify: true
-  - service: http_status:404
-```
+In the dashboard, inside your tunnel, add the following public hostnames pointing to the internal Traefik service:
 
-The `noTLSVerify` option is required because the cluster uses a self-signed certificate. The connection from the user to Cloudflare remains encrypted with a valid certificate.
+| Subdomain | Type | URL |
+|---|---|---|
+| `argocd.sputinik.tech` | HTTPS | `https://traefik.kube-system.svc.cluster.local` |
+| `headlamp.sputinik.tech` | HTTPS | `https://traefik.kube-system.svc.cluster.local` |
 
-In the Cloudflare Zero Trust dashboard you only need to create the tunnel and copy its token to Vault. The public hostnames themselves are managed by the config file above; do not configure them manually in the dashboard, or keep them empty to avoid conflicts.
+For each hostname, expand **Additional application settings > TLS** and enable **No TLS Verify**. This is required because the cluster uses a self-signed certificate. The connection from the user to Cloudflare remains encrypted with a valid certificate.
 
 ### TLS mode
 
