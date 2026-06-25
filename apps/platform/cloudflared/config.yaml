@@ -5,6 +5,7 @@ metadata:
   namespace: cloudflared
 data:
   config.yaml: |
+    tunnel: 7e339f98-76de-493a-be26-c7d274928b0b
     ingress:
       - hostname: argocd.sputinik.tech
         service: https://traefik.kube-system.svc.cluster.local
