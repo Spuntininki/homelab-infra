@@ -22,6 +22,7 @@ spec:
             - tunnel
             - --no-autoupdate
             - run
+            - --no-tls-verify
             - --token
             - $(TUNNEL_TOKEN)
           env:
