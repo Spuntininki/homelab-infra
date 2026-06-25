@@ -38,14 +38,16 @@ spec:
             httpGet:
               path: /healthcheck
               port: metrics
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30
             periodSeconds: 10
+            failureThreshold: 6
           readinessProbe:
             httpGet:
               path: /ready
               port: metrics
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               cpu: 50m
