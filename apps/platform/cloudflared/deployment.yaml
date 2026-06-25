@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:latest
+          image: cloudflare/cloudflared:2025.6.0
           args:
             - tunnel
             - --no-autoupdate
@@ -30,6 +30,21 @@ spec:
                 secretKeyRef:
                   name: cloudflared-token
                   key: token
+          ports:
+            - name: metrics
+              containerPort: 2000
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
           resources:
             requests:
               cpu: 50m

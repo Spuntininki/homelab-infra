@@ -84,6 +84,28 @@ status:
 	kubectl get pods -n argocd
 	kubectl get applications -n argocd -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,REPO:.spec.source.repoURL,PATH:.spec.source.path
 
+verify:
+	@echo "==> Kubernetes context"
+	@kubectl config current-context
+	@echo ""
+	@echo "==> Nodes"
+	@kubectl get nodes
+	@echo ""
+	@echo "==> Core platform workloads"
+	@kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server
+	@kubectl get pods -n cert-manager
+	@kubectl get pods -n external-secrets
+	@kubectl get pods -n cloudflared
+	@echo ""
+	@echo "==> Argo CD applications"
+	@kubectl get applications -n argocd
+	@echo ""
+	@echo "==> Vault integration"
+	@kubectl get clustersecretstore vault-backend
+	@echo ""
+	@echo "==> Ingresses"
+	@kubectl get ingress -A
+
 delete:
 ifeq ($(K3_TYPE),k3d)
 	$(K3_TYPE) cluster delete $(CLUSTER_NAME)

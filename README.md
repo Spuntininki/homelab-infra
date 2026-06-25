@@ -1,6 +1,8 @@
 # homelab-infra
 
-GitOps-based homelab infrastructure using `k3d` + `Argo CD`.
+GitOps-based homelab infrastructure using `k3s` (primary) or `k3d` (local) + `Argo CD`.
+
+The main environment runs on a Hostinger VPS with `k3s`. The same manifests are validated locally with `k3d` before being pushed.
 
 ## Repository Structure
 
@@ -8,22 +10,23 @@ GitOps-based homelab infrastructure using `k3d` + `Argo CD`.
 bootstrap/
   argocd/              # Initial Argo CD manifests; manual bootstrap only
 clusters/
-  local/               # k3d cluster config; root Application lives here
+  local/               # Root Argo CD Application lives here
 apps/
-  platform/            # Platform apps: sealed-secrets, monitoring, logs
+  platform/            # Platform apps: cert-manager, external-secrets, Vault integration, Headlamp, cloudflared
 charts/                # Custom Helm charts (if needed)
-manifests/
-  common/              # Reusable plain Kubernetes YAMLs
+docker/
+  vault/               # HashiCorp Vault dev-mode container (runs outside the cluster)
 ```
 
 ## How It Works
 
-1. `make create` brings up the `k3d` cluster
-2. `make repo-secret` registers your SSH key for private repo access
-3. `make bootstrap` installs `Argo CD` and creates the root `Application`
+1. `make create` installs `k3s` on the node or brings up a local `k3d` cluster
+2. `make bootstrap` installs `Argo CD` and creates the root `Application`
+3. `make repo-secret` registers your SSH key for private repo access
 4. `Argo CD` reads `clusters/local/` and syncs the `platform` app-of-apps
 5. The `platform` app creates all apps under `apps/platform/`
 6. Everything stays in sync with Git automatically
+7. `make vault-up` + `make vault-bootstrap` start Vault and provide the token to External Secrets Operator
 
 ## Adding a new Git repository
 
@@ -74,12 +77,42 @@ kubectl -n argocd label secret myapp-repo-secret argocd.argoproj.io/secret-type=
 
 You can also add a new Application under `apps/platform/<app>/` if it is part of the platform base. The existing `platform` Application will pick it up automatically.
 
-## Local workflow
+## k3s workflow (production-like VPS)
+
+### Requirements
+
+- A Linux node with SSH access (tested on Hostinger VPS).
+- `kubectl` installed on the machine that runs `make`.
+- A dedicated SSH private key for Argo CD repo access, for example `~/.ssh/id_ed25519_argocd`.
+- The key must not have a passphrase.
+
+> The Makefile commands for `k3s` assume you run them **on the target node itself** (or via SSH with the repo already cloned there), because it installs k3s via `curl | sh` and copies `/etc/rancher/k3s/k3s.yaml`.
+
+### Create the cluster
+
+```bash
+K3_TYPE=k3s K3S_NODE_IP=203.0.113.10 make create
+```
+
+### Verify the cluster
+
+```bash
+make status
+make verify
+```
+
+### Delete the cluster
+
+```bash
+K3_TYPE=k3s make delete
+```
+
+## Local workflow (k3d)
 
 ### Requirements
 
 - `k3d` => `v5.9.0`
-- `kubectl`=> `v1.35.4`
+- `kubectl` => `v1.35.4`
 - a dedicated local SSH private key for Argo CD repo access, for example `~/.ssh/id_ed25519_argocd`
 - the key must not have a passphrase
 
@@ -111,6 +144,9 @@ The Makefile supports customization via environment variables:
 # Use k3s instead of k3d (default: k3d)
 K3_TYPE=k3s
 
+# k3s node IP (required for k3s)
+K3S_NODE_IP=203.0.113.10
+
 # Custom cluster name (default: homelab)
 CLUSTER_NAME=my-cluster
 
@@ -137,9 +173,10 @@ Run basic health checks:
 
 ```bash
 make status
+make verify
 ```
 
-Delete the k3d cluster:
+Delete the cluster:
 
 ```bash
 make delete
@@ -155,15 +192,17 @@ make recreate
 
 For simplicity, this homelab runs [HashiCorp Vault](https://www.vaultproject.io/) in Docker **outside** the Kubernetes cluster. This setup emulates a production environment where secrets are managed by an external secret store rather than inside Kubernetes. The [External Secrets Operator](https://external-secrets.io/) syncs secrets from Vault into standard Kubernetes `Secret` resources.
 
+> **Trade-off:** Vault runs in dev mode with a fixed root token (`root`) and without TLS. This is intentional for learning/homelab and is **not** suitable for real sensitive data.
+
 ### Start Vault
 
-> Requires the k3d cluster to be running, because Vault attaches to the k3d Docker network (`k3d-homelab` by default).
+> Requires the Docker network to exist. For k3d it is created automatically by `make create`; for k3s the Makefile creates it before starting Vault.
 
 ```bash
 make vault-up
 ```
 
-To use a different Docker network, create `docker/vault/.env` from `.env.example` and set `VAULT_NETWORK`:
+The default Docker network is `k3-$(CLUSTER_NAME)`, e.g. `k3-homelab`. To override it, create `docker/vault/.env` from `.env.example` and set `VAULT_NETWORK`:
 
 ```bash
 cp docker/vault/.env.example docker/vault/.env
@@ -182,7 +221,7 @@ The token is saved locally to `docker/vault/eso-token.txt` and is **not** commit
 
 ### Provide the Vault token to Kubernetes
 
-Apply the token as a Kubernetes Secret manually (Option A):
+The token is injected automatically when using `make create`. To inject it manually:
 
 ```bash
 kubectl create secret generic vault-token \
@@ -247,14 +286,14 @@ envFrom:
 
 The cluster uses **Traefik** (default in k3d/k3s) as the ingress controller and **cert-manager** with a self-signed `ClusterIssuer` to provide TLS for internal services.
 
-This setup is intentionally LAN-only. The domain `sputinik.tech` is used for friendly URLs, but the services are not exposed to the internet. Because the certificates are self-signed, browsers will show a warning on first access; accept the exception to proceed.
+The domain `sputinik.tech` is used for friendly URLs. The certificates are self-signed, so browsers will show a warning on first access; accept the exception to proceed.
 
 ### Exposed services
 
-| Service | URL |
-|---|---|
-| Argo CD | `https://argocd.sputinik.tech:8443` |
-| Headlamp | `https://headlamp.sputinik.tech:8443` |
+| Service | k3d URL | k3s URL |
+|---|---|---|
+| Argo CD | `https://argocd.sputinik.tech:8443` | `https://argocd.sputinik.tech` |
+| Headlamp | `https://headlamp.sputinik.tech:8443` | `https://headlamp.sputinik.tech` |
 
 ### Local DNS (k3d)
 
@@ -266,9 +305,9 @@ Add the following entry to `/etc/hosts` on the machine that accesses the cluster
 
 The k3d load balancer maps host port `8443` to Traefik port `443`.
 
-### DNS on k3s (future)
+### DNS on k3s
 
-When migrating to k3s, point the same hostnames in your LAN DNS (router, Pi-hole, etc.) to the k3s node IP or MetalLB IP, then access the services on standard port `443`:
+Point the same hostnames in your LAN DNS (router, Pi-hole, etc.) to the k3s node IP or a LoadBalancer IP, then access the services on standard port `443`:
 
 ```text
 https://argocd.sputinik.tech
@@ -287,7 +326,7 @@ kubectl rollout restart deployment argocd-server -n argocd
 
 ### Migrating to a public certificate
 
-When you are ready to expose services to the internet, replace the `selfsigned-issuer` `ClusterIssuer` with a Let's Encrypt issuer (HTTP-01 or DNS-01) and update the `cert-manager.io/cluster-issuer` annotation on the ingresses. The rest of the configuration remains the same.
+When you are ready to expose services to the internet directly, replace the `selfsigned-issuer` `ClusterIssuer` with a Let's Encrypt issuer (HTTP-01 or DNS-01) and update the `cert-manager.io/cluster-issuer` annotation on the ingresses. The rest of the configuration remains the same.
 
 ## Exposing services to the internet with Cloudflare Tunnel
 
@@ -313,14 +352,14 @@ In the Cloudflare Zero Trust dashboard, inside your tunnel, add the following ho
 
 | Subdomain | Type | URL |
 |---|---|---|
-| `argocd.sputinik.tech` | HTTP | `http://traefik.kube-system.svc.cluster.local` |
-| `headlamp.sputinik.tech` | HTTP | `http://traefik.kube-system.svc.cluster.local` |
+| `argocd.sputinik.tech` | HTTPS | `https://traefik.kube-system.svc.cluster.local` |
+| `headlamp.sputinik.tech` | HTTPS | `https://traefik.kube-system.svc.cluster.local` |
 
-The Traefik ingress controller uses the `Host` header to route each request to the correct service.
+The Traefik ingress controller uses the `Host` header and the TLS SNI to route each request to the correct service.
 
 ### TLS mode
 
-Set the Cloudflare TLS mode to **Full**. This makes Cloudflare accept the cluster's self-signed certificate on the internal connection while presenting a valid certificate to users.
+Set the Cloudflare TLS mode to **Full** (not Full Strict). This makes Cloudflare accept the cluster's self-signed certificate on the internal origin connection while presenting a valid certificate to users.
 
 ### Same manifests on k3d and k3s
 
