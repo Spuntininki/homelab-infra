@@ -1,0 +1,37 @@
+# =============================================================================
+# ImobiManager Application
+# -----------------------------------------------------------------------------
+# Thin Argo CD Application pointing at the ImobiManager app repository.
+# All manifests (Deployments, Services, Ingresses, ExternalSecrets, ...) live
+# in the app repo under `deploy/k8s/`. This file is only a pointer, following
+# the "Recommended: separate repository" pattern from the homelab-infra README.
+#
+# One-time bootstrap (outside git):
+#   make repo-secret \
+#     REPO_URL=git@github.com:Spuntininki/ImobiManager.git \
+#     REPO_SECRET_NAME=imobimanager-repo-secret \
+#     REPO_SSH_KEY_FILE=~/.ssh/id_ed25519_imobimanager
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: imobimanager
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:Spuntininki/ImobiManager.git
+    targetRevision: HEAD
+    path: deploy/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: imobimanager
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
