@@ -6,11 +6,6 @@
 # in the app repo under `deploy/k8s/`. This file is only a pointer, following
 # the "Recommended: separate repository" pattern from the homelab-infra README.
 #
-# One-time bootstrap (outside git):
-#   make repo-secret \
-#     REPO_URL=git@github.com:Spuntininki/ImobiManager.git \
-#     REPO_SECRET_NAME=imobimanager-repo-secret \
-#     REPO_SSH_KEY_FILE=~/.ssh/id_ed25519_imobimanager
 # =============================================================================
 
 apiVersion: argoproj.io/v1alpha1
