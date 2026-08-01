@@ -18,7 +18,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: git@github.com:Spuntininki/ImobiManager.git
+    repoURL: git@github.com:personal-lucas/ImobiManager.git
     targetRevision: HEAD
     path: deploy/k8s
   destination:
