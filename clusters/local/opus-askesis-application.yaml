@@ -1,0 +1,29 @@
+# =============================================================================
+# Argo CD Application Manifest: Opus Askesis
+# -----------------------------------------------------------------------------
+# Copy this file to homelab-infra/clusters/local/opus-askesis-application.yaml.
+# Argo CD detects and automatically synchronizes the application in k3s.
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opus-askesis
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:Spuntininki/opus-askesis.git
+    targetRevision: HEAD
+    path: deploy/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: opus-askesis
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
