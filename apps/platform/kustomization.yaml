@@ -7,3 +7,4 @@ resources:
   - headlamp
   - argocd-ingress/application.yaml
   - cloudflared/application.yaml
+  - registry/application.yaml
