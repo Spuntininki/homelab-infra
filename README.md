@@ -7,16 +7,31 @@ The main environment runs on a Hostinger VPS with `k3s`. The same manifests are 
 ## Repository Structure
 
 ```text
+apps/
+  platform/            # Platform apps: cert-manager, external-secrets, Vault integration, Headlamp, cloudflared, registry, argocd
 bootstrap/
   argocd/              # Initial Argo CD manifests; manual bootstrap only
 clusters/
   local/               # Root Argo CD Application lives here
-apps/
-  platform/            # Platform apps: cert-manager, external-secrets, Vault integration, Headlamp, cloudflared
-charts/                # Custom Helm charts (if needed)
+    apps/              # Declarative application onboarding via ApplicationSet
 docker/
   vault/               # HashiCorp Vault dev-mode container (runs outside the cluster)
+docs/
+  access.md            # Persistent k3s access, TLS SANs & Tailscale mesh guide
+  runbook.md           # Day-2 operations, app onboarding, troubleshooting & disaster recovery
+scripts/
+  setup-access.sh      # Automated kubeconfig configuration & verification
+  setup-tailscale.sh   # Tailscale node & TLS SAN setup
+  vault.sh             # Vault CLI & secret management helper
+templates/
+  app-base/            # Standardized application manifest scaffold
 ```
+
+## Documentation & Operational Runbooks
+
+- **[docs/runbook.md](docs/runbook.md)**: Comprehensive Day-2 operations manual, end-to-end < 10 minute app deployment checklist, architecture map, troubleshooting guides (Vault, ESO, GHCR, local-path storage), and disaster recovery procedures.
+- **[docs/access.md](docs/access.md)**: Persistent remote k3s API access without manual SSH tunnels, TLS SAN configuration, and Tailscale mesh VPN setup.
+- **[templates/app-base/README.md](templates/app-base/README.md)**: Application scaffold documentation, platform conventions (`enableServiceLinks: false`, URL-encoded database passwords, Traefik ingress, GHCR credentials).
 
 ## How It Works
 
@@ -24,17 +39,46 @@ docker/
 2. `make bootstrap` installs `Argo CD` and creates the root `Application`
 3. `make repo-secret` registers your SSH key for private repo access
 4. `Argo CD` reads `clusters/local/` and syncs the `platform` app-of-apps
-5. The `platform` app creates all apps under `apps/platform/`
-6. Everything stays in sync with Git automatically
-7. `make vault-up` + `make vault-bootstrap` start Vault and provide the token to External Secrets Operator
+5. The `platform` app deploys all platform components under `apps/platform/`, including the `ApplicationSet`
+6. Any application declared in `clusters/local/apps/*.yaml` is automatically discovered and instantiated
+7. `make vault-up` + `make vault-bootstrap` start Vault and configure Kubernetes ServiceAccount authentication for External Secrets Operator
 
-## Adding a new Git repository
+## Deploying Applications
 
-This homelab follows the app-of-apps pattern. The root Application (`bootstrap/argocd/root-application.yaml`) watches `clusters/local/`, and every Argo CD Application placed there is automatically synced.
+### Recommended: Automated Onboarding via ApplicationSet (< 10 Minutes)
 
-### Recommended: separate repository
+Application manifests live in your application repository under `deploy/k8s/` (scaffolded using `templates/app-base/`).
 
-To add a new standalone repository, create a new Application manifest under `clusters/local/`:
+To deploy a new application into the cluster:
+
+1. Scaffold manifests in your app repository using `templates/app-base/`.
+2. Seed secrets into Vault:
+   ```bash
+   make vault-put APP=myapp SECRET=database DATA="host=... port=5432 user=... password=... name=..."
+   ```
+3. Register the app repository SSH deploy key in Argo CD:
+   ```bash
+   kubectl -n argocd create secret generic myapp-repo \
+     --from-literal=url="git@github.com:your-user/myapp.git" \
+     --from-file=sshPrivateKey="$HOME/.ssh/id_ed25519_myapp" \
+     --dry-run=client -o yaml | kubectl apply -f -
+   kubectl -n argocd label secret myapp-repo argocd.argoproj.io/secret-type=repository --overwrite
+   ```
+4. Create `clusters/local/apps/myapp.yaml` in `homelab-infra`:
+   ```yaml
+   name: myapp
+   repoURL: git@github.com:your-user/myapp.git
+   targetRevision: HEAD
+   path: deploy/k8s
+   namespace: myapp
+   ```
+5. Commit and push. Argo CD's `ApplicationSet` automatically discovers the file, creates the `Application`, enables automated self-healing, ServerSideApply, and creates the namespace.
+
+See the complete step-by-step walkthrough in **[docs/runbook.md](docs/runbook.md)**.
+
+### Alternative: Direct Argo CD Application
+
+For specialized applications or platforms requiring custom sync options, create a standalone Application manifest under `clusters/local/`:
 
 ```yaml
 # clusters/local/myapp-application.yaml
@@ -48,34 +92,20 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: git@github.com:your-user/myapp-infra.git
+    repoURL: git@github.com:your-user/myapp.git
     targetRevision: HEAD
-    path: clusters/local
+    path: deploy/k8s
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: myapp
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true
 ```
-
-Then register the repository SSH credential:
-
-```bash
-kubectl -n argocd create secret generic myapp-repo-secret \
-  --from-literal=url="git@github.com:your-user/myapp-infra.git" \
-  --from-file=sshPrivateKey="$HOME/.ssh/id_ed25519_myapp" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl -n argocd label secret myapp-repo-secret argocd.argoproj.io/secret-type=repository --overwrite
-```
-
-### Alternative: add inside this repository
-
-You can also add a new Application under `apps/platform/<app>/` if it is part of the platform base. The existing `platform` Application will pick it up automatically.
 
 ## k3s workflow (production-like VPS)
 
@@ -100,6 +130,20 @@ K3_TYPE=k3s K3S_NODE_IP=203.0.113.10 make create
 make status
 make verify
 ```
+
+### Remote k3s API access
+
+To configure persistent access to the remote k3s cluster from your local workstation (without manual SSH tunnels):
+
+```bash
+# Via public IP / domain with TLS SAN:
+SERVER=k8s.sputinik.tech REMOTE_HOST=root@187.77.241.62 make access
+
+# Or via Tailscale mesh IP:
+SERVER=100.64.0.1 REMOTE_HOST=root@187.77.241.62 make access
+```
+
+See [docs/access.md](docs/access.md) for architecture details, TLS SAN configuration, Tailscale setup, and troubleshooting.
 
 ### Delete the cluster
 
@@ -367,10 +411,56 @@ Set the Cloudflare TLS mode to **Full** (not Full Strict). This makes Cloudflare
 
 The `cloudflared` manifests work unchanged on both k3d and k3s because they reference Traefik via internal cluster DNS (`traefik.kube-system.svc.cluster.local`). When migrating to k3s, just ensure the same tunnel token is available in Vault and that the `vault-integration` app is synced.
 
-### Useful commands
+## Command Reference & Operational Tooling
+
+### Cluster Status & Health
 
 ```bash
-make vault-status    # Show Vault status
-make vault-token     # Print the ESO token
+# Display cluster nodes, pods across all namespaces, and Argo CD application sync/health status:
+make status
+
+# Run baseline health checks on core platform workloads, ingresses, and Vault integration:
+make verify
+
+# Stream container logs with automatic selector resolution (Deployment, Pod, or Docker Vault):
+make logs APP=cloudflared
+make logs APP=argocd-server NS=argocd
+make logs APP=vault TAIL=50
+```
+
+### Remote k3s API Access
+
+```bash
+# Configure persistent access via public IP / TLS SAN:
+SERVER=k8s.sputinik.tech REMOTE_HOST=root@187.77.241.62 make access
+
+# Or configure persistent access via Tailscale mesh IP:
+SERVER=100.64.0.1 REMOTE_HOST=root@187.77.241.62 make access
+
+# Merge into default ~/.kube/config:
+SERVER=k8s.sputinik.tech REMOTE_HOST=root@187.77.241.62 MERGE=1 make access
+```
+
+See **[docs/access.md](docs/access.md)** for details on TLS SAN configuration and firewall rules.
+
+### Vault & Secrets Management
+
+```bash
+# Store secrets in HashiCorp Vault:
+make vault-put APP=myapp SECRET=database DATA="host=localhost port=5432 user=appuser password=secret"
+
+# Retrieve secrets in clean JSON:
+make vault-get APP=myapp SECRET=database
+
+# List secrets stored under a path:
+make vault-list
+make vault-list PATH_ARG=secret/myapp
+
+# Inspect Vault container status:
+make vault-status
+
+# Vault lifecycle:
+make vault-up        # Start Vault container in Docker
+make vault-bootstrap # Initialize KV v2 engine, create policy & token
 make vault-down      # Stop Vault container
 ```
