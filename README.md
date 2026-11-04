@@ -16,6 +16,11 @@ apps/
 charts/                # Custom Helm charts (if needed)
 docker/
   vault/               # HashiCorp Vault dev-mode container (runs outside the cluster)
+docs/
+  access.md            # Persistent k3s access, TLS SANs & Tailscale mesh guide
+scripts/
+  setup-access.sh      # Automated kubeconfig configuration & verification
+  setup-tailscale.sh   # Tailscale node & TLS SAN setup
 ```
 
 ## How It Works
@@ -100,6 +105,20 @@ K3_TYPE=k3s K3S_NODE_IP=203.0.113.10 make create
 make status
 make verify
 ```
+
+### Remote k3s API access
+
+To configure persistent access to the remote k3s cluster from your local workstation (without manual SSH tunnels):
+
+```bash
+# Via public IP / domain with TLS SAN:
+SERVER=k8s.sputinik.tech REMOTE_HOST=root@187.77.241.62 make access
+
+# Or via Tailscale mesh IP:
+SERVER=100.64.0.1 REMOTE_HOST=root@187.77.241.62 make access
+```
+
+See [docs/access.md](docs/access.md) for architecture details, TLS SAN configuration, Tailscale setup, and troubleshooting.
 
 ### Delete the cluster
 
