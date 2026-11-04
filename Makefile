@@ -15,13 +15,15 @@ ARGOCD_VERSION ?= v3.4.4
 VAULT_DIR ?= docker/vault
 VAULT_TOKEN_FILE ?= $(VAULT_DIR)/eso-token.txt
 
-.PHONY: help create delete recreate bootstrap status kubeconfig verify clean repo-secret \
+.PHONY: help create delete recreate bootstrap status kubeconfig access test verify clean repo-secret \
   vault-up vault-down vault-bootstrap vault-status vault-token vault-k3s-routing
 
 help:
 	@printf '%s\n' "Targets:" \
 		"  make create     Create the $(K3_TYPE) cluster (k3d) or install k3s" \
+		"  make access     Configure persistent remote/local k3s API access" \
 		"  make kubeconfig Update kubeconfig and switch context" \
+		"  make test       Run script syntax checks and unit tests" \
 		"  make bootstrap  Apply the Argo CD bootstrap" \
 		"  make repo-secret Register the Git repository credential" \
 		"  make status     Show Argo CD applications" \
@@ -32,7 +34,8 @@ help:
 		"" \
 		"Examples:" \
 		"  make create                         # Uses k3d by default" \
-		"  K3_TYPE=k3s K3S_NODE_IP=1.2.3.4 make create"
+		"  K3_TYPE=k3s K3S_NODE_IP=1.2.3.4 make create" \
+		"  SERVER=k8s.sputinik.tech REMOTE_HOST=root@187.77.241.62 make access"
 
 create:
 ifeq ($(K3_TYPE),k3s)
@@ -49,19 +52,30 @@ endif
 	$(MAKE) vault-k3s-routing K3S_NODE_IP=$(K3S_NODE_IP)
 	$(MAKE) vault-bootstrap
 
+access:
+	@./scripts/setup-access.sh \
+		--cluster-name $(CLUSTER_NAME) \
+		$(if $(SERVER),--server $(SERVER),$(if $(K3S_NODE_IP),--server $(K3S_NODE_IP),)) \
+		$(if $(REMOTE_HOST),--remote-host $(REMOTE_HOST),) \
+		$(if $(MERGE),--merge,) \
+		$(if $(OUTPUT),--output $(OUTPUT),)
+
 kubeconfig:
 ifeq ($(K3_TYPE),k3d)
 	$(K3_TYPE) kubeconfig merge $(CLUSTER_NAME) --kubeconfig-switch-context
 else ifeq ($(K3_TYPE),k3s)
-	@test -n "$(K3S_NODE_IP)" || { echo "K3S_NODE_IP is required for k3s kubeconfig. Example: K3S_NODE_IP=1.2.3.4 make kubeconfig" >&2; exit 1; }
-	mkdir -p $(HOME)/.kube
-	sudo cp /etc/rancher/k3s/k3s.yaml $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)
-	sudo chown $(USER):$(USER) $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)
-	sed -i 's/127\.0\.0\.1/$(K3S_NODE_IP)/g' $(HOME)/.kube/config-k3s-$(CLUSTER_NAME)
-	cp $(HOME)/.kube/config-k3s-$(CLUSTER_NAME) $(HOME)/.kube/config
-	chmod 600 $(HOME)/.kube/config
-	@echo "Kubeconfig saved to $(HOME)/.kube/config"
+	@./scripts/setup-access.sh \
+		--cluster-name $(CLUSTER_NAME) \
+		$(if $(K3S_NODE_IP),--server $(K3S_NODE_IP),) \
+		$(if $(REMOTE_HOST),--remote-host $(REMOTE_HOST),) \
+		$(if $(MERGE),--merge,) \
+		$(if $(OUTPUT),--output $(OUTPUT),)
 endif
+
+test:
+	@bash -n scripts/setup-access.sh
+	@bash -n scripts/setup-tailscale.sh
+	@./tests/test_setup_access.sh
 
 bootstrap:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
