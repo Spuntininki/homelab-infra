@@ -1,0 +1,47 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: homelab-apps
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: homelab-apps
+    app.kubernetes.io/part-of: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: git@github.com:Spuntininki/homelab-infra.git
+        revision: HEAD
+        files:
+          - path: "clusters/local/apps/*.yaml"
+  template:
+    metadata:
+      name: "{{ .name }}"
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+      labels:
+        app.kubernetes.io/name: "{{ .name }}"
+    spec:
+      project: default
+      source:
+        repoURL: "{{ .repoURL }}"
+        targetRevision: "{{ default \"HEAD\" .targetRevision }}"
+        path: "{{ default \"deploy/k8s\" .path }}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ default .name .namespace }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+      ignoreDifferences:
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jsonPointers:
+            - /spec/target/template
+            - /status
