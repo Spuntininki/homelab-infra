@@ -16,7 +16,8 @@ VAULT_DIR ?= docker/vault
 VAULT_TOKEN_FILE ?= $(VAULT_DIR)/eso-token.txt
 
 .PHONY: help create delete recreate bootstrap status kubeconfig access test verify clean repo-secret \
-  vault-up vault-down vault-bootstrap vault-status vault-token vault-k3s-routing
+  vault-up vault-down vault-bootstrap vault-status vault-token vault-k3s-routing \
+  vault-put vault-get vault-list logs
 
 help:
 	@printf '%s\n' "Targets:" \
@@ -26,8 +27,12 @@ help:
 		"  make test       Run script syntax checks and unit tests" \
 		"  make bootstrap  Apply the Argo CD bootstrap" \
 		"  make repo-secret Register the Git repository credential" \
-		"  make status     Show Argo CD applications" \
+		"  make status     Check cluster nodes, pods across namespaces, and Argo CD applications" \
 		"  make verify     Run basic cluster checks" \
+		"  make logs       Stream logs for specified app/service (APP=<name> [NS=<namespace>])" \
+		"  make vault-put  Store secret in Vault (APP=<app> SECRET=<name> DATA=\"KEY=VAL...\")" \
+		"  make vault-get  Retrieve secret from Vault (APP=<app> SECRET=<name> [FORMAT=json|kv])" \
+		"  make vault-list List secrets in Vault [PATH_ARG=<path>]" \
 		"  make delete     Delete the $(K3_TYPE) cluster (k3d) or uninstall k3s" \
 		"  make clean      Delete the cluster and prune kubeconfig entries" \
 		"  make recreate   Delete, create, and bootstrap again" \
@@ -35,7 +40,10 @@ help:
 		"Examples:" \
 		"  make create                         # Uses k3d by default" \
 		"  K3_TYPE=k3s K3S_NODE_IP=1.2.3.4 make create" \
-		"  SERVER=k8s.sputinik.tech REMOTE_HOST=root@187.77.241.62 make access"
+		"  SERVER=k8s.sputinik.tech REMOTE_HOST=root@187.77.241.62 make access" \
+		"  make vault-put APP=myapp SECRET=db DATA=\"host=localhost port=5432\"" \
+		"  make vault-get APP=myapp SECRET=db" \
+		"  make logs APP=cloudflared"
 
 create:
 ifeq ($(K3_TYPE),k3s)
@@ -94,9 +102,36 @@ repo-secret:
 	kubectl -n argocd label secret $(REPO_SECRET_NAME) argocd.argoproj.io/secret-type=repository --overwrite
 
 status:
-	kubectl get nodes
-	kubectl get pods -n argocd
-	kubectl get applications -n argocd -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,REPO:.spec.source.repoURL,PATH:.spec.source.path
+	@echo "==> Cluster Nodes"
+	@kubectl get nodes
+	@echo ""
+	@echo "==> Pods (All Namespaces)"
+	@kubectl get pods -A
+	@echo ""
+	@echo "==> Argo CD Applications"
+	@kubectl get applications -n argocd -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,REPO:.spec.source.repoURL,PATH:.spec.source.path 2>/dev/null || kubectl get applications -n argocd 2>/dev/null || echo "No Argo CD applications found or CRD not ready."
+
+logs:
+	@test -n "$(APP)" || test -n "$(ARGS)" || { \
+		echo "Usage: make logs APP=<app_or_deployment> [NS=<namespace>] [TAIL=100]" >&2; \
+		echo "Example: make logs APP=cloudflared" >&2; \
+		echo "         make logs APP=argocd-server NS=argocd" >&2; \
+		exit 1; \
+	}
+	@APP_TARGET="$${APP:-$${ARGS}}"; \
+	NS_TARGET="$${NS:-$${APP_TARGET}}"; \
+	TAIL_COUNT="$${TAIL:-100}"; \
+	if kubectl get pods -n "$${NS_TARGET}" -l app="$${APP_TARGET}" --no-headers 2>/dev/null | grep -q .; then \
+		kubectl logs -f -n "$${NS_TARGET}" -l app="$${APP_TARGET}" --all-containers=true --tail="$${TAIL_COUNT}" --prefix=true; \
+	elif kubectl get pods -n "$${NS_TARGET}" -l app.kubernetes.io/name="$${APP_TARGET}" --no-headers 2>/dev/null | grep -q .; then \
+		kubectl logs -f -n "$${NS_TARGET}" -l app.kubernetes.io/name="$${APP_TARGET}" --all-containers=true --tail="$${TAIL_COUNT}" --prefix=true; \
+	elif kubectl get deployment "$${APP_TARGET}" -n "$${NS_TARGET}" >/dev/null 2>&1; then \
+		kubectl logs -f deployment/"$${APP_TARGET}" -n "$${NS_TARGET}" --all-containers=true --tail="$${TAIL_COUNT}"; \
+	elif [ "$${APP_TARGET}" = "vault" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "vault"; then \
+		docker logs -f vault --tail="$${TAIL_COUNT}"; \
+	else \
+		kubectl logs -f "$${APP_TARGET}" -n "$${NS_TARGET}" --tail="$${TAIL_COUNT}"; \
+	fi
 
 verify:
 	@echo "==> Kubernetes context"
@@ -185,3 +220,30 @@ vault-inject-token:
 		-n external-secrets \
 		--from-literal=token="$$(cat $(VAULT_TOKEN_FILE))" \
 		--dry-run=client -o yaml | kubectl apply -f -
+
+vault-put:
+	@test -n "$(APP)" && test -n "$(SECRET)" && test -n "$(DATA)" || test -n "$(ARGS)" || { \
+		echo "Usage: make vault-put APP=<app> SECRET=<secret_name> DATA=\"KEY=VAL...\"" >&2; \
+		echo "   or: make vault-put ARGS=\"<app> <secret_name> KEY=VAL...\"" >&2; \
+		exit 1; \
+	}
+	@if [ -n "$(ARGS)" ]; then \
+		./scripts/vault.sh put $(ARGS); \
+	else \
+		./scripts/vault.sh put $(APP) $(SECRET) $(DATA); \
+	fi
+
+vault-get:
+	@test -n "$(APP)" && test -n "$(SECRET)" || test -n "$(ARGS)" || { \
+		echo "Usage: make vault-get APP=<app> SECRET=<secret_name> [FORMAT=json|kv]" >&2; \
+		echo "   or: make vault-get ARGS=\"<app> <secret_name>\"" >&2; \
+		exit 1; \
+	}
+	@if [ -n "$(ARGS)" ]; then \
+		./scripts/vault.sh get $(ARGS); \
+	else \
+		./scripts/vault.sh get $(APP) $(SECRET) $(if $(FORMAT),--format $(FORMAT),); \
+	fi
+
+vault-list:
+	@./scripts/vault.sh list $(PATH_ARG)$(ARGS)
