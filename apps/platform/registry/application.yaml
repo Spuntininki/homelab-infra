@@ -21,6 +21,8 @@ spec:
     - group: external-secrets.io
       kind: ClusterExternalSecret
       jsonPointers:
+        - /spec/externalSecretSpec/target/template
+        - /spec/externalSecretSpec/data
         - /status
   syncPolicy:
     automated:
