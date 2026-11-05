@@ -81,7 +81,7 @@ Git Repository (github.com/Spuntininki/homelab-infra)
 ```
 HashiCorp Vault (Docker container on host at port 8200)
   │
-  ├── ServiceAccount Auth (`vault-auth-sa` in `external-secrets` namespace)
+  ├── ServiceAccount Auth (`external-secrets` in `external-secrets` namespace)
   │     └── Validated by Vault Kubernetes auth engine
   │
   ├── ClusterSecretStore (`vault-backend`)
@@ -246,10 +246,10 @@ kubectl describe clustersecretstore vault-backend
 **Common Causes & Remediation:**
 
 1. **Kubernetes ServiceAccount Token Missing or Expired:**
-   - The ClusterSecretStore uses the `vault-auth-sa` ServiceAccount in the `external-secrets` namespace.
+   - The ClusterSecretStore uses the `external-secrets` ServiceAccount in the `external-secrets` namespace.
    - Verify the ServiceAccount exists:
      ```bash
-     kubectl get serviceaccount vault-auth-sa -n external-secrets
+     kubectl get serviceaccount external-secrets -n external-secrets
      ```
    - If missing, reapply the RBAC manifests:
      ```bash
@@ -257,13 +257,15 @@ kubectl describe clustersecretstore vault-backend
      ```
 
 2. **Vault Kubernetes Auth Role Misconfigured:**
-   - On the VPS node, test if Vault can validate the ServiceAccount token:
+   - On the VPS node or via remote Vault API, verify the role configuration:
      ```bash
-     docker exec -it vault vault read auth/kubernetes/role/k8s-eso-role
+     curl -s -H "X-Vault-Token: root" ${VAULT_ADDR:-http://127.0.0.1:8200}/v1/auth/kubernetes/role/external-secrets
+     # Or if accessing the container directly:
+     docker exec -it vault vault read auth/kubernetes/role/external-secrets
      ```
    - If the role is missing, re-run Vault bootstrap:
      ```bash
-     make vault-bootstrap
+     VAULT_ADDR=http://<vps-ip>:8200 make vault-bootstrap
      ```
 
 3. **k3s DNS / Host Routing Missing (Node IP):**

@@ -14,6 +14,8 @@ ARGOCD_VERSION ?= v3.4.4
 
 VAULT_DIR ?= docker/vault
 VAULT_TOKEN_FILE ?= $(VAULT_DIR)/eso-token.txt
+VAULT_ADDR ?= http://127.0.0.1:8200
+VAULT_TOKEN ?= root
 
 .PHONY: help create delete recreate bootstrap status kubeconfig access test verify clean repo-secret \
   vault-up vault-down vault-bootstrap vault-status vault-token vault-k3s-routing \
@@ -83,6 +85,8 @@ endif
 test:
 	@bash -n scripts/setup-access.sh
 	@bash -n scripts/setup-tailscale.sh
+	@bash -n scripts/vault.sh
+	@bash -n docker/vault/vault-bootstrap.sh
 	@./tests/test_setup_access.sh
 
 bootstrap:
@@ -205,11 +209,17 @@ vault-down:
 	docker compose -f $(VAULT_DIR)/docker-compose.yaml down
 
 vault-bootstrap:
-	./$(VAULT_DIR)/vault-bootstrap.sh
+	VAULT_ADDR="$(VAULT_ADDR)" VAULT_TOKEN="$(VAULT_TOKEN)" ./$(VAULT_DIR)/vault-bootstrap.sh
 	$(MAKE) vault-inject-token
 
 vault-status:
-	@docker exec -e VAULT_ADDR=http://127.0.0.1:8200 vault vault status || true
+	@if [ -n "$$(docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "vault")" ]; then \
+		docker exec -e VAULT_ADDR="$(VAULT_ADDR)" vault vault status || true; \
+	elif command -v vault >/dev/null 2>&1; then \
+		VAULT_ADDR="$(VAULT_ADDR)" vault status || true; \
+	else \
+		curl -s "$(VAULT_ADDR)/v1/sys/health" | jq . 2>/dev/null || curl -s "$(VAULT_ADDR)/v1/sys/health" || true; \
+	fi
 vault-token:
 	@test -f $(VAULT_TOKEN_FILE) && cat $(VAULT_TOKEN_FILE) || { echo "Token file not found. Run 'make vault-bootstrap' first." >&2; exit 0; }
 
