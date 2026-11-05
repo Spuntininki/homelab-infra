@@ -81,7 +81,7 @@ Git Repository (github.com/Spuntininki/homelab-infra)
 ```
 HashiCorp Vault (Docker container on host at port 8200)
   │
-  ├── ServiceAccount Auth (`vault-auth-sa` in `external-secrets` namespace)
+  ├── ServiceAccount Auth (`external-secrets` in `external-secrets` namespace)
   │     └── Validated by Vault Kubernetes auth engine
   │
   ├── ClusterSecretStore (`vault-backend`)
@@ -89,7 +89,7 @@ HashiCorp Vault (Docker container on host at port 8200)
   │     └── Injected into Pods via Kubernetes `Secret` (`envFrom.secretRef`)
   │
   └── ClusterExternalSecret (`registry-ghcr`)
-        ├── Pulls GHCR dockerconfig from Vault (`secret/platform/ghcr-token`)
+        ├── Pulls GHCR credentials from Vault (`secret/platform/registry` with keys `username` and `token`)
         └── Automatically replicates `registry-ghcr` secret into all namespaces
 ```
 
@@ -246,10 +246,10 @@ kubectl describe clustersecretstore vault-backend
 **Common Causes & Remediation:**
 
 1. **Kubernetes ServiceAccount Token Missing or Expired:**
-   - The ClusterSecretStore uses the `vault-auth-sa` ServiceAccount in the `external-secrets` namespace.
+   - The ClusterSecretStore uses the `external-secrets` ServiceAccount in the `external-secrets` namespace.
    - Verify the ServiceAccount exists:
      ```bash
-     kubectl get serviceaccount vault-auth-sa -n external-secrets
+     kubectl get serviceaccount external-secrets -n external-secrets
      ```
    - If missing, reapply the RBAC manifests:
      ```bash
@@ -257,13 +257,15 @@ kubectl describe clustersecretstore vault-backend
      ```
 
 2. **Vault Kubernetes Auth Role Misconfigured:**
-   - On the VPS node, test if Vault can validate the ServiceAccount token:
+   - On the VPS node or via remote Vault API, verify the role configuration:
      ```bash
-     docker exec -it vault vault read auth/kubernetes/role/k8s-eso-role
+     curl -s -H "X-Vault-Token: root" ${VAULT_ADDR:-http://127.0.0.1:8200}/v1/auth/kubernetes/role/external-secrets
+     # Or if accessing the container directly:
+     docker exec -it vault vault read auth/kubernetes/role/external-secrets
      ```
    - If the role is missing, re-run Vault bootstrap:
      ```bash
-     make vault-bootstrap
+     VAULT_ADDR=http://<vps-ip>:8200 make vault-bootstrap
      ```
 
 3. **k3s DNS / Host Routing Missing (Node IP):**
@@ -335,17 +337,37 @@ Failed to pull image "ghcr.io/spuntininki/my-service:v1.0.0": rpc error: code = 
 2. **Expired or Invalid GitHub PAT:**
    - If GHCR returns `403 Forbidden`, the PAT token stored in Vault has expired or lacks `read:packages` scope.
    - Generate a new GitHub Personal Access Token (classic) with `read:packages` scope.
-   - Update Vault and regenerate the dockerconfigjson in one command:
+   - Update Vault credentials:
      ```bash
-     ./scripts/vault.sh generate-dockerconfig <github-username> <new-pat-token> \
-       --store platform ghcr-token
+     ./scripts/vault.sh put platform registry username=<github-username> token=<new-pat-token>
+     # Or via Makefile:
+     make vault-put APP=platform SECRET=registry DATA="username=<github-username> token=<new-pat-token>"
      ```
-   - External Secrets Operator detects the change within its refresh interval (`1h`) or force refresh immediately:
+   - External Secrets Operator detects the change within its refresh interval (`1m` on ClusterExternalSecret) or force refresh immediately:
      ```bash
-     kubectl annotate externalsecret registry-ghcr -n argocd force-sync=$(date +%s) --overwrite
+     kubectl annotate clusterexternalsecret registry-ghcr force-sync=$(date +%s) --overwrite
      ```
 
-3. **Missing `imagePullSecrets` in Pod Spec:**
+3. **ClusterExternalSecret Collision (`external secret already exists in namespace`):**
+   - If `kubectl describe clusterexternalsecret registry-ghcr` reports `failed namespaces: <namespace>: external secret already exists in namespace`:
+     External Secrets Operator enforces strict ownership and refuses to overwrite unowned `ExternalSecret` resources in workload namespaces.
+   - Workload repos may still have legacy `ExternalSecret/registry-ghcr` manifests (often lacking the `"auth"` base64 key in `.dockerconfigjson`).
+   - Remove redundant `registry-ghcr` manifests from the application repo (`deploy/k8s/`) and push to origin.
+   - Delete colliding unmanaged resources in the affected namespace:
+     ```bash
+     kubectl delete externalsecret registry-ghcr -n <app-namespace> --ignore-not-found
+     kubectl delete secret registry-ghcr -n <app-namespace> --ignore-not-found
+     ```
+   - Trigger immediate reconciliation:
+     ```bash
+     kubectl annotate clusterexternalsecret registry-ghcr force-sync=$(date +%s) --overwrite
+     ```
+   - Verify `ClusterExternalSecret/registry-ghcr` reports 0 failed namespaces and that the recreated Secret has the valid `"auth"` base64 key:
+     ```bash
+     kubectl get secret registry-ghcr -n <app-namespace> -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d
+     ```
+
+4. **Missing `imagePullSecrets` in Pod Spec:**
    - Ensure the deployment contains:
      ```yaml
      spec:
@@ -520,7 +542,7 @@ If the VPS is re-provisioned or formatted from scratch:
    ```
 4. Restore application secrets to Vault:
    ```bash
-   ./scripts/vault.sh put platform ghcr-token .dockerconfigjson="<b64>"
+   ./scripts/vault.sh put platform registry username="<username>" token="<pat-token>"
    ./scripts/vault.sh put cloudflare tunnel TUNNEL_TOKEN="<token>"
    # Restore app secrets:
    ./scripts/vault.sh put my-service database host=... user=... password=... name=...
