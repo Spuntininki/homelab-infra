@@ -88,6 +88,7 @@ test:
 	@bash -n scripts/vault.sh
 	@bash -n docker/vault/vault-bootstrap.sh
 	@./tests/test_setup_access.sh
+	@./tests/test_mimirflow_app.sh
 
 bootstrap:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
