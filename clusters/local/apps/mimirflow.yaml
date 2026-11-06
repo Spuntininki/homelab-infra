@@ -1,0 +1,5 @@
+name: mimirflow
+repoURL: git@github.com:Spuntininki/mimirflow.git
+targetRevision: HEAD
+path: deploy/k8s
+namespace: mimirflow
