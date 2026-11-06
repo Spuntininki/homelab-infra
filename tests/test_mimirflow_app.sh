@@ -44,7 +44,7 @@ PARSED=$(python3 -c "
 import yaml
 with open('${APP_FILE}') as f:
     d = yaml.safe_load(f)
-print(f\"{d.get('name')}|{d.get('repoURL')}|{d.get('targetRevision')}|{d.get('path')}|{d.get('namespace')}\")
+print(f\"{d.get('name')}|{d.get('repoURL')}|{d.get('targetRevision')}|{d.get('appPath', d.get('path'))}|{d.get('namespace')}\")
 ")
 
 IFS='|' read -r APP_NAME REPO_URL TARGET_REV APP_PATH APP_NS <<< "$PARSED"

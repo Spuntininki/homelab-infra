@@ -28,7 +28,7 @@ spec:
       source:
         repoURL: "{{ .repoURL }}"
         targetRevision: "{{ default \"HEAD\" .targetRevision }}"
-        path: "{{ default \"deploy/k8s\" .path }}"
+        path: '{{ if (index . "appPath") }}{{ index . "appPath" }}{{ else }}deploy/k8s{{ end }}'
       destination:
         server: https://kubernetes.default.svc
         namespace: "{{ default .name .namespace }}"

@@ -1,5 +1,5 @@
 name: sample-app
 repoURL: git@github.com:Spuntininki/sample-app.git
 targetRevision: HEAD
-path: deploy/k8s
+appPath: deploy/k8s
 namespace: sample-app
