@@ -19,7 +19,8 @@ VAULT_TOKEN ?= root
 
 .PHONY: help create delete recreate bootstrap status kubeconfig access test verify clean repo-secret \
   vault-up vault-down vault-bootstrap vault-status vault-token vault-k3s-routing \
-  vault-put vault-get vault-list logs backup-setup backup-check backup-vault backup-k3s
+  vault-put vault-get vault-list logs backup-setup backup-check backup-vault backup-k3s \
+  backup restore backup-status
 
 help:
 	@printf '%s\n' "Targets:" \
@@ -35,6 +36,9 @@ help:
 		"  make vault-put  Store secret in Vault (APP=<app> SECRET=<name> DATA=\"KEY=VAL...\")" \
 		"  make vault-get  Retrieve secret from Vault (APP=<app> SECRET=<name> [FORMAT=json|kv])" \
 		"  make vault-list List secrets in Vault [PATH_ARG=<path>]" \
+		"  make backup     Run unified backup across Vault and K3s [ARGS=...]" \
+		"  make restore    Restore Vault state and K3s volumes/databases [ARGS=...]" \
+		"  make backup-status Inspect remote inventory and backup health [ARGS=...]" \
 		"  make backup-setup Install/configure rclone and generate config from Vault" \
 		"  make backup-check Verify connectivity to encrypted Google Drive remote" \
 		"  make backup-vault Snapshot Vault storage, upload to remote, and prune old backups" \
@@ -93,12 +97,15 @@ test:
 	@bash -n scripts/backup-setup.sh
 	@bash -n scripts/backup-vault.sh
 	@bash -n scripts/backup-k3s.sh
+	@bash -n scripts/backup.sh
+	@bash -n scripts/restore.sh
 	@bash -n docker/vault/vault-bootstrap.sh
 	@./tests/test_setup_access.sh
 	@./tests/test_mimirflow_app.sh
 	@./tests/test_backup_setup.sh
 	@./tests/test_backup_vault.sh
 	@./tests/test_backup_k3s.sh
+	@./tests/test_backup_restore.sh
 
 bootstrap:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
@@ -280,4 +287,13 @@ backup-vault:
 
 backup-k3s:
 	@./scripts/backup-k3s.sh $(ARGS)
+
+backup:
+	@./scripts/backup.sh $(if $(REMOTE),--remote $(REMOTE),) $(if $(DRY_RUN),--dry-run,) $(ARGS)
+
+restore:
+	@./scripts/restore.sh $(if $(REMOTE),--remote $(REMOTE),) $(if $(TARGET_DIR),--target-dir $(TARGET_DIR),) $(if $(DRY_RUN),--dry-run,) $(ARGS)
+
+backup-status:
+	@./scripts/backup.sh status $(if $(REMOTE),--remote $(REMOTE),) $(ARGS)
 
