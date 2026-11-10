@@ -75,15 +75,26 @@ normalize_path() {
 }
 
 cmd_put() {
-  if [ $# -lt 3 ]; then
-    echo "Error: 'put' requires <app>, <secret_name>, and at least one KEY=VAL pair." >&2
+  if [ $# -lt 2 ]; then
+    echo "Error: 'put' requires target path and at least one KEY=VAL pair." >&2
     echo "Usage: $0 put <app> <secret_name> KEY=VAL [KEY2=VAL2...]" >&2
+    echo "   or: $0 put <path> KEY=VAL [KEY2=VAL2...]" >&2
     exit 1
   fi
 
   local app="$1"
-  local secret_name="$2"
-  shift 2
+  local secret_name=""
+  if [[ "$2" == *=* ]]; then
+    shift 1
+  else
+    if [ $# -lt 3 ]; then
+      echo "Error: 'put' requires at least one KEY=VAL pair." >&2
+      echo "Usage: $0 put <app> <secret_name> KEY=VAL [KEY2=VAL2...]" >&2
+      exit 1
+    fi
+    secret_name="$2"
+    shift 2
+  fi
 
   local path
   path=$(normalize_path "$app" "$secret_name")
@@ -201,7 +212,12 @@ cmd_get() {
     esac
   done
 
-  if [ -z "$app" ] || [ -z "$secret_name" ]; then
+  if [ -z "$app" ]; then
+    echo "Error: 'get' requires <app> and <secret_name> or <path>." >&2
+    echo "Usage: $0 get <app> <secret_name> [--format json|kv|raw] [--key KEY]" >&2
+    echo "   or: $0 get <path> [--format json|kv|raw] [--key KEY]" >&2
+    exit 1
+  elif [ -z "$secret_name" ] && [[ "$app" != *"/"* ]]; then
     echo "Error: 'get' requires <app> and <secret_name>." >&2
     echo "Usage: $0 get <app> <secret_name> [--format json|kv|raw] [--key KEY]" >&2
     exit 1
@@ -474,6 +490,48 @@ print(json.dumps(config, indent=2))
   fi
 }
 
+cmd_backup_put() {
+  if [ $# -lt 2 ]; then
+    echo "Error: 'backup-put' requires <target> (gdrive or crypt) and at least one KEY=VAL pair." >&2
+    echo "Usage: $0 backup-put <gdrive|crypt> KEY=VAL [KEY2=VAL2...]" >&2
+    exit 1
+  fi
+
+  local target="$1"
+  shift
+
+  case "$target" in
+    gdrive|crypt)
+      cmd_put "homelab/backup" "$target" "$@"
+      ;;
+    *)
+      echo "Error: Unknown backup target '$target'. Must be 'gdrive' or 'crypt'." >&2
+      exit 1
+      ;;
+  esac
+}
+
+cmd_backup_get() {
+  if [ $# -lt 1 ]; then
+    echo "Error: 'backup-get' requires <target> (gdrive or crypt)." >&2
+    echo "Usage: $0 backup-get <gdrive|crypt> [--format json|kv|raw] [--key KEY]" >&2
+    exit 1
+  fi
+
+  local target="$1"
+  shift
+
+  case "$target" in
+    gdrive|crypt)
+      cmd_get "homelab/backup" "$target" "$@"
+      ;;
+    *)
+      echo "Error: Unknown backup target '$target'. Must be 'gdrive' or 'crypt'." >&2
+      exit 1
+      ;;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 Vault and Homelab Secret Management Helper
@@ -483,13 +541,21 @@ Usage:
 
 Commands:
   put <app> <secret_name> KEY=VAL [KEY2=VAL2...]
-      Store one or more key-value secrets under secret/<app>/<secret_name>.
+  put <path> KEY=VAL [KEY2=VAL2...]
+      Store one or more key-value secrets under secret/<path>.
 
   get <app> <secret_name> [--format json|kv|raw] [--key KEY]
-      Retrieve secrets for <app>/<secret_name>. Defaults to clean JSON.
+  get <path> [--format json|kv|raw] [--key KEY]
+      Retrieve secrets for <path>. Defaults to clean JSON.
 
   list [path] [--json]
       List secret keys at the specified path (defaults to root: secret/).
+
+  backup-put <gdrive|crypt> KEY=VAL [KEY2=VAL2...]
+      Store backup credentials under secret/homelab/backup/<target>.
+
+  backup-get <gdrive|crypt> [--format json|kv|raw] [--key KEY]
+      Retrieve backup credentials from secret/homelab/backup/<target>.
 
   generate-dockerconfig <username> <token> [--server <registry>] [--store <app> <secret_name>] [--raw]
       Generate base64-encoded dockerconfigjson for container registries (default: ghcr.io).
@@ -528,6 +594,14 @@ case "$1" in
   list)
     shift
     cmd_list "$@"
+    ;;
+  backup-put)
+    shift
+    cmd_backup_put "$@"
+    ;;
+  backup-get)
+    shift
+    cmd_backup_get "$@"
     ;;
   generate-dockerconfig)
     shift
