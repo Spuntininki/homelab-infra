@@ -19,7 +19,7 @@ VAULT_TOKEN ?= root
 
 .PHONY: help create delete recreate bootstrap status kubeconfig access test verify clean repo-secret \
   vault-up vault-down vault-bootstrap vault-status vault-token vault-k3s-routing \
-  vault-put vault-get vault-list logs
+  vault-put vault-get vault-list logs backup-setup backup-check
 
 help:
 	@printf '%s\n' "Targets:" \
@@ -35,6 +35,8 @@ help:
 		"  make vault-put  Store secret in Vault (APP=<app> SECRET=<name> DATA=\"KEY=VAL...\")" \
 		"  make vault-get  Retrieve secret from Vault (APP=<app> SECRET=<name> [FORMAT=json|kv])" \
 		"  make vault-list List secrets in Vault [PATH_ARG=<path>]" \
+		"  make backup-setup Install/configure rclone and generate config from Vault" \
+		"  make backup-check Verify connectivity to encrypted Google Drive remote" \
 		"  make delete     Delete the $(K3_TYPE) cluster (k3d) or uninstall k3s" \
 		"  make clean      Delete the cluster and prune kubeconfig entries" \
 		"  make recreate   Delete, create, and bootstrap again" \
@@ -86,9 +88,11 @@ test:
 	@bash -n scripts/setup-access.sh
 	@bash -n scripts/setup-tailscale.sh
 	@bash -n scripts/vault.sh
+	@bash -n scripts/backup-setup.sh
 	@bash -n docker/vault/vault-bootstrap.sh
 	@./tests/test_setup_access.sh
 	@./tests/test_mimirflow_app.sh
+	@./tests/test_backup_setup.sh
 
 bootstrap:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
@@ -258,3 +262,9 @@ vault-get:
 
 vault-list:
 	@./scripts/vault.sh list $(PATH_ARG)$(ARGS)
+
+backup-setup:
+	@./scripts/backup-setup.sh
+
+backup-check:
+	@./scripts/backup-setup.sh check
