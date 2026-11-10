@@ -19,7 +19,7 @@ VAULT_TOKEN ?= root
 
 .PHONY: help create delete recreate bootstrap status kubeconfig access test verify clean repo-secret \
   vault-up vault-down vault-bootstrap vault-status vault-token vault-k3s-routing \
-  vault-put vault-get vault-list logs backup-setup backup-check backup-vault
+  vault-put vault-get vault-list logs backup-setup backup-check backup-vault backup-k3s
 
 help:
 	@printf '%s\n' "Targets:" \
@@ -38,6 +38,7 @@ help:
 		"  make backup-setup Install/configure rclone and generate config from Vault" \
 		"  make backup-check Verify connectivity to encrypted Google Drive remote" \
 		"  make backup-vault Snapshot Vault storage, upload to remote, and prune old backups" \
+		"  make backup-k3s Dump K3s databases, archive PVCs, and sync to remote [ARGS=...]" \
 		"  make delete     Delete the $(K3_TYPE) cluster (k3d) or uninstall k3s" \
 		"  make clean      Delete the cluster and prune kubeconfig entries" \
 		"  make recreate   Delete, create, and bootstrap again" \
@@ -91,11 +92,13 @@ test:
 	@bash -n scripts/vault.sh
 	@bash -n scripts/backup-setup.sh
 	@bash -n scripts/backup-vault.sh
+	@bash -n scripts/backup-k3s.sh
 	@bash -n docker/vault/vault-bootstrap.sh
 	@./tests/test_setup_access.sh
 	@./tests/test_mimirflow_app.sh
 	@./tests/test_backup_setup.sh
 	@./tests/test_backup_vault.sh
+	@./tests/test_backup_k3s.sh
 
 bootstrap:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
@@ -274,3 +277,7 @@ backup-check:
 
 backup-vault:
 	@./scripts/backup-vault.sh $(if $(REMOTE),--remote $(REMOTE),) $(if $(DEST),--dest $(DEST),) $(if $(DRY_RUN),--dry-run,) $(ARGS)
+
+backup-k3s:
+	@./scripts/backup-k3s.sh $(ARGS)
+
