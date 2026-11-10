@@ -1,0 +1,25 @@
+[Unit]
+Description=Homelab Daily Unified Encrypted Backup
+Documentation=https://github.com/Spuntininki/homelab-infra
+After=network-online.target k3s.service docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/homelab-infra
+EnvironmentFile=-/etc/default/homelab-backup
+Environment="RCLONE_CONFIG=/root/.config/rclone/rclone.conf"
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/opt/homelab-infra/scripts/backup.sh
+StandardOutput=journal
+StandardError=journal
+Nice=19
+IOSchedulingClass=idle
+
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
