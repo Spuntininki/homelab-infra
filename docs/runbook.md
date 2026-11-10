@@ -565,3 +565,171 @@ If `kubectl` reports `x509: certificate is valid for ..., not <HOST>`:
    ```bash
    SERVER=<host> REMOTE_HOST=root@<vps-ip> make access
    ```
+
+---
+
+### 4.4 Automated Backup Pipeline & Retention
+
+The homelab runs automated, encrypted backups to Google Drive using a layered rclone architecture (`gdrive` OAuth remote layered with AES-256 encrypted `gdrive-crypt`).
+
+```
++---------------------------------------------------------------------------------------+
+|                                    HOMELAB BACKUP                                     |
+|                                                                                       |
+|   make backup / scripts/backup.sh                                                     |
+|   ├── scripts/backup-vault.sh                                                         |
+|   │     ├── Consistent snapshot (Raft operator snapshot save or Docker volume)       |
+|   │     ├── Metadata generation (metadata.json) & gzip compression                   |
+|   │     ├── Upload & SHA256 verification -> gdrive-crypt:homelab-backups/vault/       |
+|   │     └── Remote retention pruning (7 daily, 4 weekly)                              |
+|   └── scripts/backup-k3s.sh                                                           |
+|         ├── Application database dumps (PostgreSQL pg_dumpall, MySQL/MariaDB mysqldump) |
+|         ├── Local-path PVC tar archives (/var/lib/rancher/k3s/storage)                |
+|         ├── Manifest generation (manifest.json) & bundle packaging                    |
+|         ├── Upload & SHA256 verification -> gdrive-crypt:homelab-backups/k3s/         |
+|         └── Remote retention pruning (7 daily, 4 weekly)                              |
++---------------------------------------------------------------------------------------+
+```
+
+#### Automation via Systemd
+
+Automated daily execution is managed via a systemd timer on the VPS host:
+- Service template: `systemd/homelab-backup.service`
+- Timer template: `systemd/homelab-backup.timer` (executes daily at `03:00 UTC` with a 5-minute jitter window)
+
+To install and activate the systemd timer on the VPS:
+```bash
+sudo cp systemd/homelab-backup.service systemd/homelab-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now homelab-backup.timer
+
+# Verify timer status and next scheduled run
+systemctl list-timers homelab-backup.timer
+```
+
+---
+
+### 4.5 Cold-Start Disaster Recovery from Encrypted Google Drive Backups
+
+Follow this procedure if the VPS experiences total catastrophic hardware loss or is rebuilt on a fresh operating system.
+
+#### Step 1: VPS Prerequisites & Dependencies
+
+On the fresh host (Ubuntu / Debian):
+```bash
+sudo apt-get update && sudo apt-get install -y git curl jq docker.io tar gzip
+sudo systemctl enable --now docker
+```
+
+Clone the repository:
+```bash
+git clone git@github.com:Spuntininki/homelab-infra.git /opt/homelab-infra
+cd /opt/homelab-infra
+```
+
+#### Step 2: Configure Rclone for Encrypted Google Drive Access
+
+Restore or generate your rclone configuration at `~/.config/rclone/rclone.conf`:
+```ini
+[gdrive]
+type = drive
+client_id = <GOOGLE_CLIENT_ID>
+client_secret = <GOOGLE_CLIENT_SECRET>
+scope = drive
+token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"..."}
+
+[gdrive-crypt]
+type = crypt
+remote = gdrive:homelab-backup
+password = <RCLONE_CRYPT_PASSWORD_HASH>
+```
+
+Verify storage connectivity and inventory:
+```bash
+# Verify remote connection
+make backup-check
+
+# Inspect existing snapshots in Google Drive
+make backup-status
+# or:
+./scripts/restore.sh list
+```
+
+#### Step 3: Restore HashiCorp Vault Storage
+
+1. Launch Vault container on Docker:
+   ```bash
+   make vault-up
+   ```
+
+2. Download and restore the latest Vault snapshot:
+   ```bash
+   # Dry-run inspection
+   ./scripts/restore.sh vault --dry-run
+
+   # Restore directly to live Vault container
+   make restore ARGS="vault --live"
+   # or:
+   ./scripts/restore.sh vault --live
+   ```
+
+3. If file storage was restored, restart Vault container and verify health:
+   ```bash
+   docker restart vault
+   make vault-status
+   make vault-list
+   ```
+
+4. Ensure `docker/vault/eso-token.txt` is populated:
+   ```bash
+   make vault-bootstrap
+   ```
+
+#### Step 4: Bootstrap K3s Cluster
+
+Install k3s and configure networking:
+```bash
+K3_TYPE=k3s K3S_NODE_IP=<vps-ip> make create
+make repo-secret
+```
+
+Verify node readiness:
+```bash
+kubectl get nodes
+```
+
+#### Step 5: Restore K3s PVCs and Databases
+
+1. Restore persistent volumes and database dumps from the latest remote bundle:
+   ```bash
+   # Safe test extraction to isolated directory
+   ./scripts/restore.sh k3s --target-dir /tmp/restored-k3s
+
+   # Live restore to cluster storage and running database pods
+   make restore ARGS="k3s --live"
+   # or:
+   ./scripts/restore.sh k3s --live
+   ```
+
+2. Specific namespace restoration (e.g. `mimirflow`):
+   ```bash
+   ./scripts/restore.sh k3s --namespace mimirflow --live
+   ```
+
+#### Step 6: Post-Recovery Health Check
+
+1. Run platform verification:
+   ```bash
+   make verify
+   ```
+
+2. Check Argo CD application sync statuses:
+   ```bash
+   make status
+   ```
+
+3. Stream application logs to verify workload startup:
+   ```bash
+   make logs APP=cloudflared
+   make logs APP=mimirflow-backend NS=mimirflow
+   ```
