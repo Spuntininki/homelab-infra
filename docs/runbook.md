@@ -70,6 +70,7 @@ Git Repository (github.com/Spuntininki/homelab-infra)
         │           ├── registry (ClusterExternalSecret for GHCR)
         │           ├── cloudflared (Deployment + ExternalSecret)
         │           ├── headlamp (Helm)
+        │           ├── monitoring (kube-prometheus-stack Helm)
         │           └── argocd (ApplicationSet)
         │
         └── apps/*.yaml (Monitored by ApplicationSet)
@@ -91,6 +92,35 @@ HashiCorp Vault (Docker container on host at port 8200)
   └── ClusterExternalSecret (`registry-ghcr`)
         ├── Pulls GHCR credentials from Vault (`secret/platform/registry` with keys `username` and `token`)
         └── Automatically replicates `registry-ghcr` secret into all namespaces
+```
+
+### 1.4 Observability Architecture & Metrics Flow
+
+```
++---------------------------------------------------------------------------------------+
+|                                  OBSERVABILITY STACK                                  |
+|                                                                                       |
+|   1. Metrics Scraping Flow:                                                           |
+|      Workload Pods (annotations: prometheus.io/scrape=true, port=8080, path=/metrics) |
+|         │                                                                             |
+|         v (Prometheus HTTP Scrape)                                                    |
+|      Prometheus Server (kube-prometheus-stack in monitoring namespace)                |
+|         │                                                                             |
+|         v (PromQL Datasource)                                                         |
+|      Grafana (https://grafana.sputinik.tech)                                          |
+|                                                                                       |
+|   2. Automated Dashboard Provisioning Flow:                                           |
+|      Application Repo (deploy/k8s/dashboards/*.json + kustomization.yaml)             |
+|         │                                                                             |
+|         v (Argo CD GitOps Sync)                                                       |
+|      ConfigMap (<app>-dashboard) with label `grafana_dashboard: "1"`                   |
+|         │                                                                             |
+|         v (Kubernetes Watch API across all namespaces)                                |
+|      Grafana Sidecar (kiwigrid/k8s-sidecar container)                                 |
+|         │                                                                             |
+|         v (Extracts JSON -> /tmp/dashboards/)                                         |
+|      Grafana Server (Loads dashboard dynamically without restart)                     |
++---------------------------------------------------------------------------------------+
 ```
 
 ---
@@ -117,7 +147,7 @@ APP_NAME="my-service"
 DOMAIN="${APP_NAME}.sputinik.tech"
 IMAGE="ghcr.io/spuntininki/${APP_NAME}:v1.0.0"
 
-sed -i "s/app-template/${APP_NAME}/g" *.yaml
+sed -i "s/app-template/${APP_NAME}/g" *.yaml dashboards/*.json
 sed -i "s|app\.sputinik\.tech|${DOMAIN}|g" ingress.yaml
 sed -i "s|ghcr.io/spuntininki/app-template:latest|${IMAGE}|g" deployment.yaml
 ```
@@ -127,6 +157,8 @@ Key platform conventions already built into `templates/app-base/`:
 - `imagePullSecrets: [{ name: registry-ghcr }]` automatically uses the replicated GHCR credentials.
 - `urlquery` Sprig filter in `external-secret.yaml` URL-encodes special characters in database passwords.
 - Baseline resource requests (`50m` CPU / `64Mi` memory) protect VPS stability.
+- `dashboards/overview.json` + `kustomization.yaml` configMapGenerator with `grafana_dashboard: "1"` automatically provisions an overview dashboard into Grafana.
+- `prometheus.io/scrape: "true"` pod annotations in `deployment.yaml` enable automated metrics ingestion by Prometheus.
 
 Validate manifests locally:
 ```bash
@@ -226,8 +258,14 @@ kubectl get externalsecret -n my-service
 # Verify Ingress and TLS certificate:
 kubectl get ingress,certificate -n my-service
 
+# Verify Grafana dashboard ConfigMap:
+kubectl get configmap -n my-service -l grafana_dashboard=1
+
 # Test health check endpoint:
 curl -fsSL -k https://my-service.sputinik.tech/healthz
+
+# Verify dashboard in Grafana:
+# Open https://grafana.sputinik.tech -> Dashboards -> Application Overview
 ```
 
 ---
@@ -426,6 +464,106 @@ If a namespace or PVC is deleted while pods are still referencing it:
 # Remove finalizers to unblock termination:
 kubectl patch pvc <pvc-name> -n <namespace> -p '{"metadata":{"finalizers":null}}'
 ```
+
+---
+
+### Runbook D: Observability, Metrics Scraping & Grafana Dashboard Discovery
+
+#### Symptom 1: Grafana Dashboard Missing or Not Updating
+
+**Diagnostic Steps:**
+
+1. **Verify ConfigMap Exists and Has the Correct Label:**
+   Grafana's sidecar discovers dashboards exclusively via the `grafana_dashboard: "1"` label:
+   ```bash
+   kubectl get configmap -n <app-namespace> -l grafana_dashboard=1
+   ```
+   If no ConfigMap is listed, verify that `kustomization.yaml` has the `configMapGenerator` entry and that Argo CD has completed synchronization:
+   ```bash
+   kubectl get configmaps -n <app-namespace>
+   ```
+
+2. **Inspect Grafana Sidecar Discovery Logs:**
+   The `grafana-sc-dashboard` sidecar container logs all ConfigMap detection and file extraction events:
+   ```bash
+   kubectl logs -n monitoring -l app.kubernetes.io/name=grafana -c grafana-sc-dashboard --tail=50
+   ```
+   Look for:
+   - `Adding file ... /tmp/dashboards/...` (successful discovery)
+   - `Updating file ...` (successful update)
+   - `Error when updating ...` (permission or schema error)
+
+3. **Verify Dashboard JSON Syntax:**
+   If the JSON contains invalid syntax, Grafana will reject the file:
+   ```bash
+   jq . deploy/k8s/dashboards/overview.json
+   ```
+
+4. **Verify Internal Mounted File in Grafana Pod:**
+   Confirm the sidecar successfully wrote the dashboard to the shared volume:
+   ```bash
+   kubectl exec -n monitoring -l app.kubernetes.io/name=grafana -c grafana -- ls -la /tmp/dashboards/
+   ```
+
+**Common Causes & Remediation:**
+- **Missing or Incorrect Label**: The label must be exactly `grafana_dashboard: "1"` (string `"1"`, not boolean `true`).
+- **Namespace Mismatch**: The sidecar is configured with `searchNamespace: ALL`. If dashboards in custom namespaces are ignored, verify `sidecar.dashboards.searchNamespace` in `apps/platform/monitoring/application.yaml`.
+
+---
+
+#### Symptom 2: Workload Metrics Not Scraping in Prometheus
+
+**Diagnostic Steps:**
+
+1. **Verify Pod Scraping Annotations:**
+   Prometheus Operator scrapes pods matching the standard annotation convention:
+   ```bash
+   kubectl get pods -n <app-namespace> -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations}{"\n"}{end}'
+   ```
+   Ensure the following annotations exist:
+   - `prometheus.io/scrape: "true"`
+   - `prometheus.io/port: "8080"` (must match the container port serving metrics)
+   - `prometheus.io/path: "/metrics"`
+
+2. **Verify Metrics Endpoint Health Inside Container:**
+   Test if the application is serving valid Prometheus exposition format:
+   ```bash
+   kubectl exec -n <app-namespace> <pod-name> -- curl -fsSL http://localhost:8080/metrics | head -n 20
+   ```
+
+3. **Check Prometheus Targets Status:**
+   Port-forward the Prometheus server or check status:
+   ```bash
+   kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
+   ```
+   Navigate to `http://localhost:9090/targets` and search for the pod name or endpoint to check scrape status, error messages, and last scrape time.
+
+---
+
+#### Developer Workflow: Exporting Dashboards from Grafana to Application Git Repos
+
+To maintain GitOps integrity, all production dashboards must be version-controlled in the application repository:
+
+1. **Design Interactively**:
+   Access Grafana at `https://grafana.sputinik.tech` and build your dashboard panels. Use variables (`$namespace`, `$app`) for portability.
+2. **Export JSON Definition**:
+   - In Grafana, click the gear icon (**Dashboard settings**) -> **JSON Model** -> copy contents, OR:
+   - Click the **Share** button -> **Export** tab -> **Save to file**.
+3. **Commit to Application Repository**:
+   Save the file under `deploy/k8s/dashboards/<dashboard-name>.json`.
+4. **Reference in Kustomize**:
+   Add or update `configMapGenerator` in `deploy/k8s/kustomization.yaml`:
+   ```yaml
+   configMapGenerator:
+     - name: <app-name>-dashboard
+       files:
+         - dashboards/<dashboard-name>.json
+       options:
+         labels:
+           grafana_dashboard: "1"
+   ```
+5. **Reconciliation**:
+   Once pushed, Argo CD synchronizes the ConfigMap, and the Grafana sidecar automatically reloads the updated dashboard within seconds.
 
 ---
 
