@@ -100,12 +100,15 @@ test:
 	@bash -n scripts/backup.sh
 	@bash -n scripts/restore.sh
 	@bash -n docker/vault/vault-bootstrap.sh
+	@bash -n tests/test_observability.sh
 	@./tests/test_setup_access.sh
 	@./tests/test_mimirflow_app.sh
 	@./tests/test_backup_setup.sh
 	@./tests/test_backup_vault.sh
 	@./tests/test_backup_k3s.sh
 	@./tests/test_backup_restore.sh
+	@./tests/test_observability.sh
+
 
 bootstrap:
 	kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
