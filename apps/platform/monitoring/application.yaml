@@ -82,6 +82,13 @@ spec:
               - secretName: grafana-server-tls
                 hosts:
                   - grafana.sputinik.tech
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              access: proxy
+              url: http://loki.loki.svc:3100
+              jsonData:
+                maxLines: 1000
           sidecar:
             dashboards:
               enabled: true
@@ -91,6 +98,8 @@ spec:
             datasources:
               enabled: true
               defaultDatasourceEnabled: true
+              searchNamespace: ALL
+
 
         kube-state-metrics:
           resources:

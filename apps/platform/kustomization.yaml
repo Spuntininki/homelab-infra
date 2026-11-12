@@ -10,3 +10,5 @@ resources:
   - registry/application.yaml
   - argocd
   - monitoring
+  - loki
+
