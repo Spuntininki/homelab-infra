@@ -6,3 +6,11 @@ resources:
   - service.yaml
   - ingress.yaml
   - external-secret.yaml
+
+configMapGenerator:
+  - name: app-template-dashboard
+    files:
+      - dashboards/overview.json
+    options:
+      labels:
+        grafana_dashboard: "1"
