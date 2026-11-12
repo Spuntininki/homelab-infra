@@ -112,19 +112,20 @@ grafana_storage_class = values['grafana']['persistence'].get('storageClassName')
 
 prom_storage_class = values['prometheus']['prometheusSpec']['storageSpec']['volumeClaimTemplate']['spec'].get('storageClassName')
 prom_retention = values['prometheus']['prometheusSpec'].get('retention')
+prom_retention_size = values['prometheus']['prometheusSpec'].get('retentionSize')
 
 loki_ds = next((ds for ds in values['grafana'].get('additionalDataSources', []) if ds.get('name') == 'Loki'), {})
 loki_ds_type = loki_ds.get('type')
 loki_ds_url = loki_ds.get('url')
 
-print(f'{chart}|{repo_url}|{target_ns}|{release_name}|{ing_enabled}|{ing_host}|{ing_tls_secret}|{ing_entrypoint}|{sidecar_enabled}|{sidecar_label}|{sidecar_val}|{sidecar_ns}|{grafana_persist_enabled}|{grafana_storage_class}|{prom_storage_class}|{prom_retention}|{loki_ds_type}|{loki_ds_url}')
+print(f'{chart}|{repo_url}|{target_ns}|{release_name}|{ing_enabled}|{ing_host}|{ing_tls_secret}|{ing_entrypoint}|{sidecar_enabled}|{sidecar_label}|{sidecar_val}|{sidecar_ns}|{grafana_persist_enabled}|{grafana_storage_class}|{prom_storage_class}|{prom_retention}|{prom_retention_size}|{loki_ds_type}|{loki_ds_url}')
 ")
 
 IFS='|' read -r \
   MON_CHART MON_REPO MON_NS MON_RELEASE \
   MON_ING_ENABLED MON_ING_HOST MON_ING_TLS MON_ING_ENTRYPOINT \
   MON_SC_ENABLED MON_SC_LABEL MON_SC_VAL MON_SC_NS \
-  MON_GRAFANA_PERSIST MON_GRAFANA_SC MON_PROM_SC MON_PROM_RETENTION \
+  MON_GRAFANA_PERSIST MON_GRAFANA_SC MON_PROM_SC MON_PROM_RETENTION MON_PROM_RETENTION_SIZE \
   MON_LOKI_DS_TYPE MON_LOKI_DS_URL <<< "$MON_PARSED"
 
 assert_eq "kube-prometheus-stack" "$MON_CHART" "Monitoring chart is kube-prometheus-stack"
@@ -143,6 +144,7 @@ assert_eq "True" "$MON_GRAFANA_PERSIST" "Grafana persistence is enabled"
 assert_eq "local-path" "$MON_GRAFANA_SC" "Grafana persistence storageClassName is local-path"
 assert_eq "local-path" "$MON_PROM_SC" "Prometheus storageClassName is local-path"
 assert_eq "15d" "$MON_PROM_RETENTION" "Prometheus retention is 15d"
+assert_eq "20GiB" "$MON_PROM_RETENTION_SIZE" "Prometheus retentionSize is 20GiB"
 assert_eq "loki" "$MON_LOKI_DS_TYPE" "Grafana Loki datasource type is loki"
 assert_eq "http://loki.loki.svc:3100" "$MON_LOKI_DS_URL" "Grafana Loki datasource connects to http://loki.loki.svc:3100"
 
