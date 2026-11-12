@@ -26,7 +26,7 @@ Replace the following placeholder values across `deploy/k8s/`:
 
 | Placeholder | Example Value | Target Files |
 |---|---|---|
-| `app-template` | `my-service` | All manifests |
+| `app-template` | `my-service` | All manifests, `dashboards/overview.json` |
 | `ghcr.io/spuntininki/app-template:latest` | `ghcr.io/spuntininki/my-service:v1.0.0` | `deployment.yaml` |
 | `app.sputinik.tech` | `my-service.sputinik.tech` | `ingress.yaml` |
 | `secret/app-template/database` | `secret/my-service/database` | `external-secret.yaml` |
@@ -34,7 +34,7 @@ Replace the following placeholder values across `deploy/k8s/`:
 Quick search-and-replace command:
 
 ```bash
-sed -i 's/app-template/my-service/g' *.yaml
+sed -i 's/app-template/my-service/g' *.yaml dashboards/*.json
 sed -i 's/app\.sputinik\.tech/my-service.sputinik.tech/g' ingress.yaml
 ```
 
@@ -88,6 +88,15 @@ spec:
 
 Commit and push. Argo CD synchronizes the application, cert-manager issues the TLS certificate, and the service is live.
 
+### 5. Access Grafana Dashboard & Verify Observability
+
+The template includes out-of-the-box observability scaffolding:
+- Prometheus pod scraping annotations in `deployment.yaml` (`prometheus.io/scrape: "true"`).
+- A pre-configured Grafana dashboard in `dashboards/overview.json`.
+- Automatic dashboard provisioning via Kustomize `configMapGenerator` labeled `grafana_dashboard: "1"`.
+
+Once deployed, access Grafana at `https://grafana.sputinik.tech` and find the dashboard under **Dashboards** -> **Application Overview** (or search for your service name).
+
 ---
 
 ## 🏛️ Platform Conventions & Rationale
@@ -130,6 +139,53 @@ Commit and push. Argo CD synchronizes the application, cert-manager issues the T
 
 - **Resource Baseline**: Default requests are `cpu: 50m`, `memory: 64Mi`; default limits are `cpu: 200m`, `memory: 256Mi`. This fits comfortably within Hostinger VPS resources while preventing runaway memory leaks from triggering node-wide OOM kills.
 - **Probes**: Configured for `/healthz` on the HTTP container port. Adjust paths to `/` or the application's actual health check endpoint as needed.
+
+### 7. Observability: Prometheus Scraping & Automated Grafana Dashboard Provisioning
+
+#### Pod Scraping Annotations
+Standardized Prometheus scrape annotations are embedded directly into `deployment.yaml` (`spec.template.metadata.annotations`):
+```yaml
+annotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+```
+- `prometheus.io/scrape: "true"`: Instructs the Prometheus scraper to scrape metrics from this pod.
+- `prometheus.io/port: "8080"`: Points to the container's HTTP listening port where `/metrics` is served.
+- `prometheus.io/path: "/metrics"`: Path to the Prometheus metrics endpoint.
+
+#### Grafana Sidecar Discovery
+The homelab's `kube-prometheus-stack` deployment runs Grafana with the KiwiGrid `k8s-sidecar` enabled (`searchNamespace: ALL`), configured to watch for ConfigMaps labeled `grafana_dashboard: "1"`.
+
+In `kustomization.yaml`:
+```yaml
+configMapGenerator:
+  - name: app-template-dashboard
+    files:
+      - dashboards/overview.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+```
+When this ConfigMap is synchronized into the cluster:
+1. Grafana's sidecar controller immediately detects the `grafana_dashboard: "1"` label.
+2. The sidecar extracts each file from the ConfigMap's `data` section (`dashboards/overview.json`) and writes it to Grafana's internal provisioning directory (`/tmp/dashboards/`).
+3. Grafana automatically loads and serves the dashboard without requiring a pod restart or manual UI import.
+
+#### Developer Workflow: Exporting & Customizing Dashboards
+Developers can design dashboards in the Grafana UI and persist them in Git:
+
+1. **Design & Iterate**: Open Grafana at `https://grafana.sputinik.tech` and build or modify panels (CPU, memory, custom business metrics).
+2. **Parameterize Queries**: Use templated dashboard variables such as `$namespace` and `$app` (as defined in `dashboards/overview.json`) so the dashboard works across environments.
+3. **Export Dashboard JSON**:
+   - In Grafana, click the **Share** button (or **Dashboard Settings** -> **JSON Model**).
+   - Select the **Export** tab and click **Save to file** (or copy the JSON Model text).
+4. **Save to Repository**:
+   - Place the exported JSON file in your repository under `deploy/k8s/dashboards/` (e.g. `deploy/k8s/dashboards/overview.json`).
+5. **Register in Kustomize**:
+   - Verify that `deploy/k8s/kustomization.yaml` has the `configMapGenerator` referencing the file with label `grafana_dashboard: "1"`.
+6. **Commit & Deploy**:
+   - Push to Git. Argo CD synchronizes the updated ConfigMap, and Grafana's sidecar picks up the changes in real-time.
 
 ---
 
@@ -177,6 +233,9 @@ Validate the rendered manifests locally before committing:
 # 1. Build manifests with Kustomize
 kubectl kustomize templates/app-base/
 
-# 2. Dry-run validation against Kubernetes API schema
+# 2. Verify dashboard ConfigMap and labels
+kubectl kustomize templates/app-base/ | grep -A 5 "grafana_dashboard: \"1\""
+
+# 3. Dry-run validation against Kubernetes API schema
 kubectl apply --dry-run=client -f templates/app-base/deployment.yaml -f templates/app-base/service.yaml -f templates/app-base/ingress.yaml
 ```

@@ -9,3 +9,6 @@ resources:
   - cloudflared/application.yaml
   - registry/application.yaml
   - argocd
+  - monitoring
+  - loki
+
