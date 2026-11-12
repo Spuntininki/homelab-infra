@@ -170,13 +170,14 @@ template_yaml = es['spec']['target']['template']['data']['alertmanager.yaml']
 
 has_telegram_receiver = "telegram_configs:" in template_yaml
 has_watchdog_null = 'alertname = "Watchdog"' in template_yaml and "receiver: 'null'" in template_yaml
+has_info_inhibitor_null = 'alertname = "InfoInhibitor"' in template_yaml and "receiver: 'null'" in template_yaml
 
-print(f'{store_name}|{target_name}|{vault_key_bot}|{vault_prop_bot}|{vault_key_chat}|{vault_prop_chat}|{has_telegram_receiver}|{has_watchdog_null}')
+print(f'{store_name}|{target_name}|{vault_key_bot}|{vault_prop_bot}|{vault_key_chat}|{vault_prop_chat}|{has_telegram_receiver}|{has_watchdog_null}|{has_info_inhibitor_null}')
 EOF
 )
 
 IFS='|' read -r \
-  ES_STORE ES_TARGET ES_VK_BOT ES_VP_BOT ES_VK_CHAT ES_VP_CHAT ES_HAS_TG ES_HAS_WATCHDOG <<< "$MON_ES_PARSED"
+  ES_STORE ES_TARGET ES_VK_BOT ES_VP_BOT ES_VK_CHAT ES_VP_CHAT ES_HAS_TG ES_HAS_WATCHDOG ES_HAS_INFO_INHIBITOR <<< "$MON_ES_PARSED"
 
 assert_eq "vault-backend" "$ES_STORE" "ExternalSecret references vault-backend ClusterSecretStore"
 assert_eq "alertmanager-telegram-config" "$ES_TARGET" "ExternalSecret target secret is alertmanager-telegram-config"
@@ -186,6 +187,7 @@ assert_eq "secret/monitoring/telegram" "$ES_VK_CHAT" "Chat ID Vault key is secre
 assert_eq "chat_id" "$ES_VP_CHAT" "Chat ID Vault property is chat_id"
 assert_eq "True" "$ES_HAS_TG" "Alertmanager template includes telegram_configs"
 assert_eq "True" "$ES_HAS_WATCHDOG" "Alertmanager template suppresses Watchdog to null"
+assert_eq "True" "$ES_HAS_INFO_INHIBITOR" "Alertmanager template suppresses InfoInhibitor to null"
 
 LOKI_PROMTAIL_PARSED=$(python3 -c "
 import yaml
