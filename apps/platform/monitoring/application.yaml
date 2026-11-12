@@ -48,6 +48,7 @@ spec:
 
         alertmanager:
           alertmanagerSpec:
+            configSecret: alertmanager-telegram-config
             resources:
               requests:
                 cpu: 25m
