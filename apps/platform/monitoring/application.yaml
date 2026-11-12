@@ -28,7 +28,7 @@ spec:
         prometheus:
           prometheusSpec:
             retention: 15d
-            retentionSize: 20Gi
+            retentionSize: 20GiB
             resources:
               requests:
                 cpu: 100m
