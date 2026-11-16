@@ -16,6 +16,15 @@ spec:
       values: |
         cleanPrometheusOperatorObjectNames: true
 
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+
         prometheusOperator:
           resources:
             requests:
